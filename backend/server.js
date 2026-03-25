@@ -3,6 +3,14 @@
 //  Node.js + Express + mysql2
 // ============================================================
 
+
+// ===============================
+// IMPORTS PRINCIPALES
+// ===============================
+// express: Framework para servidor HTTP y rutas REST
+// mysql2/promise: Cliente MySQL con soporte promesas
+// cors: Middleware para habilitar CORS
+// dotenv: Carga variables de entorno desde .env
 import express        from "express";
 import mysql          from "mysql2/promise";
 import cors           from "cors";
@@ -10,14 +18,31 @@ import dotenv         from "dotenv";
 
 dotenv.config();
 
+
+// ===============================
+// INICIALIZACIÓN DE LA APP
+// ===============================
+// app: Instancia principal de Express
+// PORT: Puerto de escucha del backend
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
+
+// ===============================
+// MIDDLEWARES GLOBALES
+// ===============================
+// Habilita CORS solo para el frontend configurado
 app.use(cors({ origin: process.env.FRONTEND_URL || "http://localhost:5173" }));
+// Permite recibir y parsear JSON en los requests
 app.use(express.json());
 
 // ─── POOL DE CONEXIONES ─────────────────────────────────────
 
+
+// ===============================
+// POOL DE CONEXIONES MYSQL
+// ===============================
+// pool: Pool de conexiones reutilizables para eficiencia y concurrencia
 const pool = mysql.createPool({
   host:     process.env.DB_HOST     || "127.0.0.1",
   port:     Number(process.env.DB_PORT) || 3306,
@@ -25,18 +50,32 @@ const pool = mysql.createPool({
   password: process.env.DB_PASSWORD || "",
   database: process.env.DB_NAME     || "inmobiliaria",
   waitForConnections: true,
-  connectionLimit:    10,
+  connectionLimit:    10, // Máximo de conexiones simultáneas
   timezone: "Z",
 });
 
 // Verifica conexión al arrancar
+
+// ===============================
+// TEST DE CONEXIÓN AL INICIAR
+// ===============================
+// Verifica que la base de datos esté accesible al arrancar el servidor
 pool.getConnection()
   .then(conn => { console.log("✅  Conectado a MySQL"); conn.release(); })
   .catch(err  => { console.error("❌  Error de conexión MySQL:", err.message); process.exit(1); });
 
 // ─── HELPER ─────────────────────────────────────────────────
 
-// Mapea una fila de `personas` + `propiedades` al shape que espera el frontend
+
+// ===============================
+// HELPERS DE TRANSFORMACIÓN DE DATOS
+// ===============================
+
+/**
+ * mapOwner(row): Mapea una fila de la tabla personas (y propiedades asociadas) al formato esperado por el frontend para propietarios.
+ * @param {Object} row - Fila de la base de datos
+ * @returns {Object} Objeto propietario para frontend
+ */
 function mapOwner(row) {
   return {
     id:    String(row.id),
@@ -48,6 +87,9 @@ function mapOwner(row) {
   };
 }
 
+/**
+ * mapTenant(row): Mapea una fila de la tabla personas al formato de inquilino para el frontend.
+ */
 function mapTenant(row) {
   return {
     id:      String(row.id),
@@ -58,6 +100,9 @@ function mapTenant(row) {
   };
 }
 
+/**
+ * mapProperty(row): Mapea una fila de la tabla propiedades al formato esperado por el frontend.
+ */
 function mapProperty(row) {
   return {
     id:      String(row.id),
@@ -70,6 +115,9 @@ function mapProperty(row) {
   };
 }
 
+/**
+ * mapLease(row): Mapea una fila de la tabla contratos al formato esperado por el frontend.
+ */
 function mapLease(row) {
   return {
     id:         String(row.id),
@@ -87,7 +135,9 @@ function mapLease(row) {
   };
 }
 
-// Traduce el tipo de propiedad del frontend al ENUM de la BD
+/**
+ * mapTipoToDB(tipo): Traduce el tipo de propiedad del frontend al ENUM de la base de datos.
+ */
 function mapTipoToDB(tipo) {
   const m = {
     "Departamento":     "departamento",
@@ -100,6 +150,9 @@ function mapTipoToDB(tipo) {
   return m[tipo] || "otro";
 }
 
+/**
+ * mapTipo(tipo): Traduce el tipo de la base de datos al formato amigable para el frontend.
+ */
 function mapTipo(tipo) {
   const m = {
     departamento:    "Departamento",

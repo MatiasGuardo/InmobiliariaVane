@@ -1,0 +1,176 @@
+# EXPLICACION DETALLADA DEL PROYECTO INMOBILIARIA
+
+---
+
+## 1. ESTRUCTURA GENERAL DEL PROYECTO
+
+El proyecto está dividido en dos grandes partes: **backend** y **frontend**. Además, hay archivos de configuración y utilidades en la raíz.
+
+### Estructura de carpetas y archivos:
+
+- **App.jsx**: Archivo raíz (probablemente ejemplo o inicializador global)
+- **db.js**: Archivo de conexión o utilidades de base de datos (fuera de backend)
+- **backend/**: Lógica del servidor y API
+- **frontend/**: Aplicación cliente (React + Vite)
+- **package-lock.json**: Control de dependencias
+- **.git/**, **.vscode/**: Configuración de git y VS Code
+
+#### backend/
+- **server.js**: Servidor Express, API REST, conexión MySQL
+- **package.json**: Dependencias y scripts del backend
+- **.env**: Variables de entorno (no visible, pero importante)
+- **node_modules/**: Dependencias
+
+#### frontend/
+- **src/**: Código fuente React
+- **public/**: Recursos estáticos
+- **index.html**: HTML principal
+- **vite.config.js**: Configuración de Vite
+- **eslint.config.js**: Linter
+- **package.json**: Dependencias y scripts del frontend
+- **.env**: Variables de entorno
+- **README.md**: Documentación
+
+---
+
+## 2. BACKEND (server.js)
+
+### 2.1. Dependencias y configuración
+- **express**: Framework para crear el servidor HTTP y las rutas.
+- **mysql2/promise**: Cliente MySQL con soporte para promesas.
+- **cors**: Permite peticiones desde el frontend (CORS).
+- **dotenv**: Carga variables de entorno desde .env.
+
+### 2.2. Inicialización
+- Se crea una app Express.
+- El puerto se toma de la variable de entorno `PORT` o por defecto 3001.
+- Se configura CORS para aceptar peticiones del frontend (por defecto http://localhost:5173).
+- Se habilita el parseo de JSON en los requests.
+
+### 2.3. Conexión a la base de datos
+- Se crea un pool de conexiones MySQL usando variables de entorno o valores por defecto.
+- Se verifica la conexión al iniciar el servidor.
+
+### 2.4. Helpers (funciones auxiliares)
+- **mapOwner(row)**: Transforma una fila de la tabla personas+propiedades al formato esperado por el frontend para propietarios.
+- **mapTenant(row)**: Igual que arriba pero para inquilinos.
+- **mapProperty(row)**: Igual para propiedades.
+- **mapLease(row)**: Igual para contratos.
+- **mapTipoToDB(tipo)**: Traduce el tipo de propiedad del frontend al valor ENUM de la base de datos.
+- **mapTipo(tipo)**: Traduce el tipo de la base de datos al formato amigable para el frontend.
+
+### 2.5. Endpoints principales
+
+#### PROPIEDADES
+- **GET /api/properties**: Lista todas las propiedades activas, con leaseId si tiene contrato activo.
+- **POST /api/properties**: Crea una nueva propiedad. Separa dirección y número, asigna estado según si está ocupada o no.
+- **PUT /api/properties/:id**: Actualiza una propiedad existente.
+- **DELETE /api/properties/:id**: Baja lógica (no borra, solo marca como inactiva).
+
+#### PROPIETARIOS
+- **GET /api/owners**: Lista propietarios activos y sus propiedades.
+- **POST /api/owners**: Crea un propietario. Separa nombre y apellido.
+- **DELETE /api/owners/:id**: Baja lógica.
+
+#### INQUILINOS
+- **GET /api/tenants**: Lista inquilinos activos y leaseId si tiene contrato activo.
+- **POST /api/tenants**: Crea un inquilino.
+- **DELETE /api/tenants/:id**: Baja lógica.
+
+#### CONTRATOS
+- **GET /api/leases**: Lista contratos activos o vencidos (no borradores).
+- **POST /api/leases**: Crea un contrato, marca la propiedad como alquilada.
+- **DELETE /api/leases/:id**: Elimina contrato y libera la propiedad si no tiene otro contrato activo.
+- **PATCH /api/leases/:id/status**: Cambia el estado del contrato (activo, vencido, rescindido, renovado).
+
+#### OTROS
+- **GET /api/health**: Healthcheck simple.
+
+### 2.6. Variables y funciones importantes
+- **pool**: Pool de conexiones MySQL, usado en todos los queries.
+- **app**: Instancia de Express.
+- **PORT**: Puerto de escucha.
+- **mapOwner, mapTenant, mapProperty, mapLease**: Transforman datos de la BD al formato frontend.
+
+---
+
+## 3. FRONTEND (React + Vite)
+
+### 3.1. Estructura
+- **src/App.jsx**: Componente principal de la app.
+- **src/main.jsx**: Punto de entrada, monta App en el DOM.
+- **src/assets/**: Imágenes y recursos (hero.png, react.svg, vite.svg).
+- **src/App.css, index.css**: Estilos globales y de App.
+- **public/**: Recursos estáticos (favicon, icons).
+- **index.html**: HTML base.
+- **vite.config.js**: Configuración de Vite (dev server, build, etc).
+- **eslint.config.js**: Reglas de linting.
+
+### 3.2. Flujo general
+- El frontend consume la API del backend para mostrar, crear, editar y eliminar propiedades, propietarios, inquilinos y contratos.
+- Utiliza React para el manejo de estado y renderizado de componentes.
+- Vite permite recarga rápida y build optimizado.
+
+---
+
+## 4. PUNTOS FUERTES DEL PROYECTO
+- Separación clara entre backend y frontend.
+- Uso de pool de conexiones para eficiencia en MySQL.
+- Endpoints REST bien definidos y documentados.
+- Helpers para transformar datos entre BD y frontend.
+- Baja lógica en vez de borrado físico (mejor para auditoría).
+- Uso de variables de entorno para configuración.
+- Frontend moderno con React y Vite.
+- Código backend bastante legible y modular.
+
+---
+
+## 5. COSAS QUE FALTAN O PUEDEN MEJORAR
+
+### Seguridad
+- Falta autenticación y autorización (cualquier usuario puede acceder a la API).
+- No hay validación profunda de datos (solo checks básicos en backend).
+- No se usan HTTPS ni tokens JWT.
+- No hay rate limiting ni protección contra ataques comunes (SQLi, XSS, CSRF).
+
+### Escalabilidad y robustez
+- No hay tests automáticos (ni unitarios ni de integración).
+- No hay manejo de logs avanzados ni monitoreo.
+- No hay manejo de errores global (middleware de errores en Express).
+- No hay paginación en los endpoints (puede ser un problema con muchos datos).
+- No hay documentación OpenAPI/Swagger.
+
+### Frontend
+- No se observa manejo de rutas (React Router).
+- No hay manejo de autenticación en frontend.
+- No hay tests de componentes.
+- No hay internacionalización (i18n).
+- No hay manejo de estados de carga/errores detallados.
+
+### Otros
+- El archivo db.js en la raíz no parece estar integrado (revisar si es necesario).
+- Faltan scripts de despliegue o Docker para facilitar la puesta en producción.
+- No hay CI/CD configurado.
+
+---
+
+## 6. RECOMENDACIONES
+- Implementar autenticación (JWT, OAuth, etc).
+- Agregar validaciones más estrictas (Joi, express-validator).
+- Añadir tests (Jest, Supertest para backend; React Testing Library para frontend).
+- Documentar la API con Swagger/OpenAPI.
+- Agregar paginación y filtros a los endpoints.
+- Mejorar el manejo de errores y logs.
+- Considerar Dockerizar la app para facilitar despliegue.
+- Añadir manejo de rutas y estados en el frontend.
+- Revisar y limpiar archivos no usados (como db.js si no se usa).
+
+---
+
+## 7. CONCLUSION
+
+El proyecto inmobiliaria es una base sólida para una app de gestión inmobiliaria, con una arquitectura moderna y buenas prácticas iniciales. Sin embargo, para producción o uso real, es fundamental reforzar la seguridad, robustez y escalabilidad, así como mejorar la experiencia de usuario en el frontend y la documentación general.
+
+---
+
+*Este archivo fue generado automáticamente para documentar y analizar el proyecto.*
