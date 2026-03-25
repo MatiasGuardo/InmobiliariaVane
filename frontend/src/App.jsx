@@ -1,3 +1,8 @@
+
+// ===============================
+// IMPORTS Y ICONOS
+// ===============================
+// Importa hooks de React y un set de íconos de lucide-react para la UI
 import { useState, useEffect, useMemo } from "react";
 import {
   Building2, Users, FileText, Bell, LayoutDashboard,
@@ -11,14 +16,27 @@ import {
 
 // ─── CONFIG ─────────────────────────────────────────────────────────────────
 
+
+// ===============================
+// CONFIGURACIÓN DE API
+// ===============================
+// URL base de la API backend, configurable por variable de entorno
 const API = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
 
+
+// ===============================
+// HELPERS DE FECHA Y MONEDA
+// ===============================
+// today: Fecha actual
 const today   = new Date();
+// fmtDate: Formatea una fecha a string legible (dd-mmm-yyyy)
 const fmtDate = d => new Date(d).toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" });
+// diffDays: Diferencia en días entre una fecha y hoy
 const diffDays = d => Math.ceil((new Date(d) - today) / 86400000);
 
+// getAlertLevel: Determina el nivel de alerta según días restantes
 const getAlertLevel = (days) => {
   if (days <= 15)  return { label: "Crítico",  color: "text-red-600",    bg: "bg-red-50",    dot: "bg-red-500",    border: "border-red-200" };
   if (days <= 30)  return { label: "Urgente",  color: "text-orange-600", bg: "bg-orange-50", dot: "bg-orange-500", border: "border-orange-200" };
@@ -26,16 +44,27 @@ const getAlertLevel = (days) => {
   return null;
 };
 
+// fmtCurrency: Formatea un número como moneda ARS
 const fmtCurrency = (n) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(n);
 
 // ─── HOOK: llamada genérica a la API ────────────────────────────────────────
 
-function useApi(endpoint) {
-  const [data,    setData]    = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState(null);
 
+// ===============================
+// HOOK PERSONALIZADO: useApi
+// ===============================
+/**
+ * useApi(endpoint): Hook para consumir la API y manejar loading/error/data
+ * @param {string} endpoint - Ruta relativa de la API
+ * @returns { data, setData, loading, error, reload }
+ */
+function useApi(endpoint) {
+  const [data,    setData]    = useState([]);    // Datos obtenidos
+  const [loading, setLoading] = useState(true);  // Estado de carga
+  const [error,   setError]   = useState(null);  // Mensaje de error
+
+  // load: Función que realiza el fetch a la API
   const load = async () => {
     setLoading(true);
     setError(null);
@@ -50,6 +79,7 @@ function useApi(endpoint) {
     }
   };
 
+  // Efecto: recarga cuando cambia el endpoint
   useEffect(() => { load(); }, [endpoint]);
 
   return { data, setData, loading, error, reload: load };
@@ -57,6 +87,18 @@ function useApi(endpoint) {
 
 // ─── MODAL ──────────────────────────────────────────────────────────────────
 
+
+// ===============================
+// COMPONENTE MODAL
+// ===============================
+/**
+ * Modal: Muestra un modal flotante con título y contenido
+ * @param {boolean} open - Si está abierto
+ * @param {function} onClose - Handler para cerrar
+ * @param {string} title - Título del modal
+ * @param {ReactNode} children - Contenido
+ * @param {boolean} wide - Si es ancho
+ */
 function Modal({ open, onClose, title, children, wide = false }) {
   if (!open) return null;
   return (
@@ -80,6 +122,13 @@ function Modal({ open, onClose, title, children, wide = false }) {
 
 // ─── FORM FIELD ─────────────────────────────────────────────────────────────
 
+
+// ===============================
+// COMPONENTES DE FORMULARIO
+// ===============================
+/**
+ * Field: Wrapper para campos de formulario con label y hint
+ */
 function Field({ label, children, hint }) {
   return (
     <div className="space-y-1.5">
@@ -90,6 +139,9 @@ function Field({ label, children, hint }) {
   );
 }
 
+/**
+ * Input: Input estilizado para formularios
+ */
 function Input({ ...props }) {
   return (
     <input
