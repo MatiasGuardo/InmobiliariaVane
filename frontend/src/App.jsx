@@ -255,24 +255,20 @@ function Dashboard({ properties, leases, tenants, owners }) {
     .sort((a, b) => a.days - b.days);
 
   const recentLeases = [...leases].sort((a, b) => new Date(b.startDate) - new Date(a.startDate)).slice(0, 4);
-
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
         <p className="text-sm text-gray-500 mt-1">
-          {today.toLocaleDateString("es-AR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+          {new Date().toLocaleDateString("es-AR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
         </p>
       </div>
-
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard icon={Building2}    label="Propiedades Totales"  value={properties.length} color="blue"   trend={8} />
         <StatCard icon={CheckCircle}  label="Propiedades Ocupadas" value={occupied} sub={properties.length ? `${Math.round(occupied/properties.length*100)}% ocupación` : ""} color="green" />
         <StatCard icon={Key}          label="Vacantes"             value={vacant}   color="orange" />
         <StatCard icon={DollarSign}   label="Renta Mensual Total"  value={fmtCurrency(totalRent)} color="slate" trend={6} />
       </div>
-
-      {/* Barra de ocupación */}
       {properties.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-100 p-5">
           <div className="flex items-center justify-between mb-3">
@@ -291,8 +287,6 @@ function Dashboard({ properties, leases, tenants, owners }) {
           </div>
         </div>
       )}
-
-      {/* Alertas */}
       {alerts.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-100 p-5">
           <div className="flex items-center gap-2 mb-4">
@@ -319,42 +313,8 @@ function Dashboard({ properties, leases, tenants, owners }) {
           </div>
         </div>
       )}
-
-      {/* Contratos recientes */}
-      <div className="bg-white rounded-2xl border border-gray-100 p-5">
-        <h3 className="font-semibold text-gray-800 mb-4">Contratos Activos Recientes</h3>
-        <div className="space-y-2">
-          {recentLeases.map(l => {
-            const prop   = properties.find(p => p.id === l.propertyId);
-            const tenant = tenants.find(t => t.id === l.tenantId);
-            const days   = diffDays(l.endDate);
-            const alert  = getAlertLevel(days);
-            return (
-              <div key={l.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors">
-                <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
-                  <FileText size={14} className="text-blue-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-800 truncate">{prop?.address}</p>
-                  <p className="text-xs text-gray-400">{tenant?.name}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium text-gray-700">{fmtCurrency(l.rent)}</p>
-                  {alert
-                    ? <p className={`text-xs ${alert.color}`}>{days}d restantes</p>
-                    : <p className="text-xs text-gray-400">Vence {fmtDate(l.endDate)}</p>
-                  }
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
-}
-
-// ─── PROPERTIES ───────────────────────────────────────────────────────────────
 
 function Properties({ properties, setProperties, owners, leases }) {
   const [search,  setSearch]  = useState("");
@@ -706,63 +666,14 @@ function Leases({ leases, setLeases, properties, tenants }) {
   const openNew = () => {
     setEditing(null);
     setForm({ propertyId: "", tenantId: "", startDate: "", endDate: "", rent: "", increase: "6" });
-    setModal(true);
-  };
-
-  const openEdit = (l) => {
-    setEditing(l.id);
-    setForm({
-      propertyId: l.propertyId,
-      tenantId: l.tenantId,
-      startDate: l.startDate,
-      endDate: l.endDate,
-      rent: l.rent,
-      increase: l.increase,
-      status: l.status
-    });
-    setModal(true);
-  };
-
-  const del = async (id) => {
-    if (!confirm("¿Eliminar este contrato? Esta acción no se puede deshacer.")) return;
-    try {
-      const res = await fetch(`${API}/api/leases/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(await res.text());
-      setLeases(prev => prev.filter(l => l.id !== id));
-    } catch (e) {
-      alert("Error al eliminar: " + e.message);
-    }
-  };
-
-  const save = async () => {
-    if (!form.propertyId || !form.tenantId || !form.startDate || !form.endDate || !form.rent) return;
-    setSaving(true);
-    const method = editing ? "PUT" : "POST";
-    const url    = editing ? `${API}/api/leases/${editing}` : `${API}/api/leases`;
-    try {
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, rent: Number(form.rent), increase: Number(form.increase) }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const saved = await res.json();
-      setLeases(prev => editing ? prev.map(l => l.id === editing ? saved : l) : [...prev, saved]);
-      setModal(false);
-    } catch (e) {
-      alert("Error al guardar: " + e.message);
-    } finally {
-      setSaving(false);
-      setEditing(null);
-    }
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Contratos</h1>
-          <p className="text-sm text-gray-500 mt-1">{leases.filter(l => l.status === "activo").length} contratos activos</p>
+          <p className="text-sm text-gray-500 mt-1">{activos.length} contratos activos</p>
         </div>
         <button onClick={openNew}
           className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200">
@@ -770,8 +681,15 @@ function Leases({ leases, setLeases, properties, tenants }) {
         </button>
       </div>
 
+      {/* Contratos activos */}
       <div className="space-y-3">
-        {leases.map(l => {
+        {activos.length === 0 && (
+          <div className="bg-white rounded-2xl border border-gray-100 py-16 text-center">
+            <FileText size={36} className="text-gray-200 mx-auto mb-3" />
+            <p className="font-medium text-gray-500">Sin contratos activos</p>
+          </div>
+        )}
+        {activos.map(l => {
           const prop   = properties.find(p => p.id === l.propertyId);
           const tenant = tenants.find(t => t.id === l.tenantId);
           const days   = diffDays(l.endDate);
@@ -823,12 +741,33 @@ function Leases({ leases, setLeases, properties, tenants }) {
             </div>
           );
         })}
-        {leases.length === 0 && (
-          <div className="bg-white rounded-2xl border border-gray-100 py-16 text-center">
-            <FileText size={36} className="text-gray-200 mx-auto mb-3" />
-            <p className="font-medium text-gray-500">Sin contratos</p>
+      </div>
+
+      {/* Contratos finalizados */}
+      <div className="space-y-3 pt-8">
+        <h2 className="text-lg font-bold text-gray-700 mb-2">Contratos Finalizados</h2>
+        {finalizados.length === 0 && (
+          <div className="bg-white rounded-2xl border border-gray-100 py-10 text-center">
+            <CheckCircle size={32} className="text-emerald-400 mx-auto mb-2" />
+            <p className="font-medium text-gray-500">No hay contratos finalizados</p>
           </div>
         )}
+        {finalizados.map(l => {
+          const prop   = properties.find(p => p.id === l.propertyId);
+          const tenant = tenants.find(t => t.id === l.tenantId);
+          return (
+            <div key={l.id} className="bg-white rounded-2xl border-2 border-black p-5 flex items-center justify-between hover:shadow-md transition-all">
+              <div>
+                <p className="font-semibold text-gray-800 truncate">{prop?.address}</p>
+                <p className="text-sm text-gray-500 mt-0.5">{tenant?.name}</p>
+                <span className="inline-block mt-2 px-3 py-1 text-xs font-bold rounded-full bg-gray-200 text-gray-700">Finalizado</span>
+              </div>
+              <button onClick={() => del(l.id)} className="p-2 rounded-lg hover:bg-red-50 transition-colors">
+                <Trash2 size={16} className="text-red-400" />
+              </button>
+            </div>
+          );
+        })}
       </div>
 
       <Modal open={modal} onClose={() => { setModal(false); setEditing(null); }} title={editing ? "Editar Contrato" : "Nuevo Contrato"} wide>
@@ -878,8 +817,10 @@ function Leases({ leases, setLeases, properties, tenants }) {
 // ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
 
 function Notifications({ leases, properties, tenants }) {
+  // Mostrar solo contratos activos y no vencidos en alertas
+  const today = new Date();
   const notifications = leases
-    .filter(l => l.status === "activo")
+    .filter(l => l.status === "activo" && new Date(l.endDate) >= today)
     .map(l => {
       const days  = diffDays(l.endDate);
       const level = getAlertLevel(days);
@@ -897,7 +838,6 @@ function Notifications({ leases, properties, tenants }) {
         <h1 className="text-2xl font-bold text-gray-900">Notificaciones</h1>
         <p className="text-sm text-gray-500 mt-1">Sistema de alertas de vencimiento de contratos</p>
       </div>
-
       <div className="grid grid-cols-3 gap-3">
         {[
           { label: "15 días o menos", color: "bg-red-500",    desc: "Crítico — acción inmediata" },
@@ -907,50 +847,35 @@ function Notifications({ leases, properties, tenants }) {
           <div key={label} className="bg-white rounded-xl border border-gray-100 p-4 flex items-start gap-3">
             <div className={`w-3 h-3 rounded-full mt-0.5 flex-shrink-0 ${color}`} />
             <div>
-              <p className="text-sm font-medium text-gray-700">{label}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{desc}</p>
+              <p className="font-semibold text-gray-800">{label}</p>
+              <p className="text-xs text-gray-500">{desc}</p>
             </div>
           </div>
         ))}
       </div>
-
-      {notifications.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-gray-100 py-16 text-center">
-          <CheckCircle size={36} className="text-emerald-400 mx-auto mb-3" />
-          <p className="font-medium text-gray-700">Sin alertas activas</p>
-          <p className="text-sm text-gray-400 mt-1">Todos los contratos están en regla</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {notifications.map(n => (
-            <div key={n.id} className={`bg-white rounded-2xl border p-5 ${n.level.border} ${n.level.bg}`}>
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-4">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${n.level.bg} border ${n.level.border}`}>
-                    <AlertTriangle size={16} className={n.level.color} />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="font-semibold text-gray-800">{n.prop?.address}</p>
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${n.level.bg} ${n.level.color} border ${n.level.border}`}>{n.level.label}</span>
-                    </div>
-                    <p className="text-sm text-gray-500 mt-0.5">Inquilino: {n.tenant?.name}</p>
-                    <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                      <span className="flex items-center gap-1"><Calendar size={11} />Vence: {fmtDate(n.endDate)}</span>
-                      <span className="flex items-center gap-1"><DollarSign size={11} />{fmtCurrency(n.rent)}/mes</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <p className={`text-3xl font-black ${n.level.color}`}>{n.days}</p>
-                  <p className="text-xs text-gray-500">días restantes</p>
-                </div>
-              </div>
+      {/* Alertas activas */}
+      <div className="space-y-3">
+        {notifications.length === 0 && (
+          <div className="bg-white rounded-2xl border border-gray-100 py-16 text-center">
+            <Bell size={36} className="text-gray-200 mx-auto mb-3" />
+            <p className="font-medium text-gray-500">Sin alertas activas</p>
+          </div>
+        )}
+        {notifications.map(a => (
+          <div key={a.id} className={`flex items-center gap-4 p-3.5 rounded-xl border ${a.level.bg} ${a.level.border}`}>
+            <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${a.level.dot}`} />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-800 truncate">{a.prop?.address}</p>
+              <p className="text-xs text-gray-500">{a.tenant?.name}</p>
             </div>
-          ))}
-        </div>
-      )}
-
+            <div className="text-right flex-shrink-0">
+              <p className={`text-sm font-bold ${a.level.color}`}>{a.days === 0 ? "Hoy" : `${a.days}d`}</p>
+              <p className={`text-xs ${a.level.color}`}>{a.level.label}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+      {/* Contratos OK */}
       {ok.length > 0 && (
         <div>
           <p className="text-sm font-medium text-gray-500 mb-3">Contratos sin alertas ({ok.length})</p>
@@ -974,6 +899,28 @@ function Notifications({ leases, properties, tenants }) {
       )}
     </div>
   );
+        <div>
+          <p className="text-sm font-medium text-gray-500 mb-3">Contratos sin alertas ({ok.length})</p>
+          <div className="space-y-2">
+            {ok.map(l => {
+              const prop   = properties.find(p => p.id === l.propertyId);
+              const tenant = tenants.find(t => t.id === l.tenantId);
+              return (
+                <div key={l.id} className="bg-white rounded-xl border border-gray-100 px-4 py-3 flex items-center gap-3">
+                  <CheckCircle size={14} className="text-emerald-400 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-700 truncate">{prop?.address}</p>
+                    <p className="text-xs text-gray-400">{tenant?.name}</p>
+                  </div>
+                  <p className="text-xs text-gray-400 flex-shrink-0">Vence {fmtDate(l.endDate)}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );  
 }
 
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
@@ -1123,7 +1070,11 @@ function App() {
       </main>
     </div>
   );
-}
+
+
 
 export default App;
+
+export default App;
+
 
