@@ -1,70 +1,38 @@
-
 // ===============================
 // IMPORTS Y ICONOS
 // ===============================
-// Importa hooks de React y un set de íconos de lucide-react para la UI
 import { useState, useEffect, useMemo } from "react";
 import {
   Building2, Users, FileText, Bell, LayoutDashboard,
-  Plus, Search, ChevronRight, X, AlertTriangle,
-  CheckCircle, Clock, TrendingUp, Home, UserCheck,
-  Calendar, DollarSign, MapPin, Phone, Mail,
-  Edit2, Trash2, Eye, Filter, MoreHorizontal,
-  ArrowUpRight, ArrowDownRight, Percent, Key,
-  ChevronDown, User, Building
+  Plus, Search, X, AlertTriangle,
+  CheckCircle, Calendar, DollarSign, Phone, Mail,
+  Edit2, Trash2, ArrowUpRight, ArrowDownRight, Percent, Key,
+  User,
 } from "lucide-react";
 
-// ─── CONFIG ─────────────────────────────────────────────────────────────────
-
-
-// ===============================
-// CONFIGURACIÓN DE API
-// ===============================
-// URL base de la API backend, configurable por variable de entorno
+// ─── CONFIG ──────────────────────────────────────────────────────────────────
 const API = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
-// ─── HELPERS ────────────────────────────────────────────────────────────────
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+const fmtDate  = d => new Date(d).toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" });
+const diffDays = d => Math.ceil((new Date(d) - new Date()) / 86400000);
 
-
-// ===============================
-// HELPERS DE FECHA Y MONEDA
-// ===============================
-// today: Fecha actual
-const today   = new Date();
-// fmtDate: Formatea una fecha a string legible (dd-mmm-yyyy)
-const fmtDate = d => new Date(d).toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" });
-// diffDays: Diferencia en días entre una fecha y hoy
-const diffDays = d => Math.ceil((new Date(d) - today) / 86400000);
-
-// getAlertLevel: Determina el nivel de alerta según días restantes
 const getAlertLevel = (days) => {
-  if (days <= 15)  return { label: "Crítico",  color: "text-red-600",    bg: "bg-red-50",    dot: "bg-red-500",    border: "border-red-200" };
-  if (days <= 30)  return { label: "Urgente",  color: "text-orange-600", bg: "bg-orange-50", dot: "bg-orange-500", border: "border-orange-200" };
-  if (days <= 90)  return { label: "Próximo",  color: "text-amber-600",  bg: "bg-amber-50",  dot: "bg-amber-400",  border: "border-amber-200" };
+  if (days <= 15) return { label: "Crítico",  color: "text-red-600",    bg: "bg-red-50",    dot: "bg-red-500",    border: "border-red-200" };
+  if (days <= 30) return { label: "Urgente",  color: "text-orange-600", bg: "bg-orange-50", dot: "bg-orange-500", border: "border-orange-200" };
+  if (days <= 90) return { label: "Próximo",  color: "text-amber-600",  bg: "bg-amber-50",  dot: "bg-amber-400",  border: "border-amber-200" };
   return null;
 };
 
-// fmtCurrency: Formatea un número como moneda ARS
 const fmtCurrency = (n) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(n);
 
-// ─── HOOK: llamada genérica a la API ────────────────────────────────────────
-
-
-// ===============================
-// HOOK PERSONALIZADO: useApi
-// ===============================
-/**
- * useApi(endpoint): Hook para consumir la API y manejar loading/error/data
- * @param {string} endpoint - Ruta relativa de la API
- * @returns { data, setData, loading, error, reload }
- */
+// ─── HOOK useApi ─────────────────────────────────────────────────────────────
 function useApi(endpoint) {
-  const [data,    setData]    = useState([]);    // Datos obtenidos
-  const [loading, setLoading] = useState(true);  // Estado de carga
-  const [error,   setError]   = useState(null);  // Mensaje de error
+  const [data,    setData]    = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState(null);
 
-  // load: Función que realiza el fetch a la API
   const load = async () => {
     setLoading(true);
     setError(null);
@@ -79,26 +47,11 @@ function useApi(endpoint) {
     }
   };
 
-  // Efecto: recarga cuando cambia el endpoint
   useEffect(() => { load(); }, [endpoint]);
-
   return { data, setData, loading, error, reload: load };
 }
 
-// ─── MODAL ──────────────────────────────────────────────────────────────────
-
-
-// ===============================
-// COMPONENTE MODAL
-// ===============================
-/**
- * Modal: Muestra un modal flotante con título y contenido
- * @param {boolean} open - Si está abierto
- * @param {function} onClose - Handler para cerrar
- * @param {string} title - Título del modal
- * @param {ReactNode} children - Contenido
- * @param {boolean} wide - Si es ancho
- */
+// ─── MODAL ───────────────────────────────────────────────────────────────────
 function Modal({ open, onClose, title, children, wide = false }) {
   if (!open) return null;
   return (
@@ -120,15 +73,7 @@ function Modal({ open, onClose, title, children, wide = false }) {
   );
 }
 
-// ─── FORM FIELD ─────────────────────────────────────────────────────────────
-
-
-// ===============================
-// COMPONENTES DE FORMULARIO
-// ===============================
-/**
- * Field: Wrapper para campos de formulario con label y hint
- */
+// ─── FORM HELPERS ────────────────────────────────────────────────────────────
 function Field({ label, children, hint }) {
   return (
     <div className="space-y-1.5">
@@ -139,9 +84,6 @@ function Field({ label, children, hint }) {
   );
 }
 
-/**
- * Input: Input estilizado para formularios
- */
 function Input({ ...props }) {
   return (
     <input
@@ -163,15 +105,6 @@ function Select({ children, ...props }) {
 }
 
 // ─── LOADING / ERROR ─────────────────────────────────────────────────────────
-
-function LoadingSpinner() {
-  return (
-    <div className="flex items-center justify-center py-16">
-      <div className="w-8 h-8 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin" />
-    </div>
-  );
-}
-
 function ErrorBox({ message, onRetry }) {
   return (
     <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
@@ -188,13 +121,12 @@ function ErrorBox({ message, onRetry }) {
 }
 
 // ─── STAT CARD ───────────────────────────────────────────────────────────────
-
 function StatCard({ icon: Icon, label, value, sub, color = "blue", trend }) {
   const colors = {
-    blue:   { bg: "bg-blue-50",    icon: "text-blue-600",    val: "text-blue-700" },
-    green:  { bg: "bg-emerald-50", icon: "text-emerald-600", val: "text-emerald-700" },
-    orange: { bg: "bg-orange-50",  icon: "text-orange-600",  val: "text-orange-700" },
-    slate:  { bg: "bg-slate-50",   icon: "text-slate-600",   val: "text-slate-700" },
+    blue:   { bg: "bg-blue-50",    icon: "text-blue-600" },
+    green:  { bg: "bg-emerald-50", icon: "text-emerald-600" },
+    orange: { bg: "bg-orange-50",  icon: "text-orange-600" },
+    slate:  { bg: "bg-slate-50",   icon: "text-slate-600" },
   };
   const c = colors[color];
   return (
@@ -220,7 +152,6 @@ function StatCard({ icon: Icon, label, value, sub, color = "blue", trend }) {
 }
 
 // ─── BADGE ───────────────────────────────────────────────────────────────────
-
 function Badge({ status }) {
   const map = {
     ocupado:   "bg-emerald-100 text-emerald-700",
@@ -237,11 +168,10 @@ function Badge({ status }) {
 }
 
 // ─── DASHBOARD ───────────────────────────────────────────────────────────────
-
-function Dashboard({ properties, leases, tenants, owners }) {
-  const occupied   = properties.filter(p => p.status === "ocupado").length;
-  const vacant     = properties.filter(p => p.status === "vacante").length;
-  const totalRent  = leases.filter(l => l.status === "activo").reduce((s, l) => s + l.rent, 0);
+function Dashboard({ properties, leases, tenants }) {
+  const occupied  = properties.filter(p => p.status === "ocupado").length;
+  const vacant    = properties.filter(p => p.status === "vacante").length;
+  const totalRent = leases.filter(l => l.status === "activo").reduce((s, l) => s + l.rent, 0);
 
   const alerts = leases
     .filter(l => l.status === "activo")
@@ -255,6 +185,7 @@ function Dashboard({ properties, leases, tenants, owners }) {
     .sort((a, b) => a.days - b.days);
 
   const recentLeases = [...leases].sort((a, b) => new Date(b.startDate) - new Date(a.startDate)).slice(0, 4);
+
   return (
     <div className="space-y-6">
       <div>
@@ -263,17 +194,19 @@ function Dashboard({ properties, leases, tenants, owners }) {
           {new Date().toLocaleDateString("es-AR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
         </p>
       </div>
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={Building2}    label="Propiedades Totales"  value={properties.length} color="blue"   trend={8} />
-        <StatCard icon={CheckCircle}  label="Propiedades Ocupadas" value={occupied} sub={properties.length ? `${Math.round(occupied/properties.length*100)}% ocupación` : ""} color="green" />
-        <StatCard icon={Key}          label="Vacantes"             value={vacant}   color="orange" />
-        <StatCard icon={DollarSign}   label="Renta Mensual Total"  value={fmtCurrency(totalRent)} color="slate" trend={6} />
+        <StatCard icon={Building2}   label="Propiedades Totales"  value={properties.length} color="blue"   trend={8} />
+        <StatCard icon={CheckCircle} label="Propiedades Ocupadas" value={occupied} sub={properties.length ? `${Math.round(occupied / properties.length * 100)}% ocupación` : ""} color="green" />
+        <StatCard icon={Key}         label="Vacantes"             value={vacant}   color="orange" />
+        <StatCard icon={DollarSign}  label="Renta Mensual Total"  value={fmtCurrency(totalRent)} color="slate" trend={6} />
       </div>
+
       {properties.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-100 p-5">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-gray-800">Tasa de Ocupación</h3>
-            <span className="text-2xl font-bold text-gray-900">{Math.round(occupied/properties.length*100)}%</span>
+            <span className="text-2xl font-bold text-gray-900">{Math.round(occupied / properties.length * 100)}%</span>
           </div>
           <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
             <div
@@ -287,6 +220,7 @@ function Dashboard({ properties, leases, tenants, owners }) {
           </div>
         </div>
       )}
+
       {alerts.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-100 p-5">
           <div className="flex items-center gap-2 mb-4">
@@ -313,9 +247,41 @@ function Dashboard({ properties, leases, tenants, owners }) {
           </div>
         </div>
       )}
+
+      <div className="bg-white rounded-2xl border border-gray-100 p-5">
+        <h3 className="font-semibold text-gray-800 mb-4">Contratos Activos Recientes</h3>
+        <div className="space-y-2">
+          {recentLeases.map(l => {
+            const prop   = properties.find(p => p.id === l.propertyId);
+            const tenant = tenants.find(t => t.id === l.tenantId);
+            const days   = diffDays(l.endDate);
+            const alert  = getAlertLevel(days);
+            return (
+              <div key={l.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                  <FileText size={14} className="text-blue-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-800 truncate">{prop?.address}</p>
+                  <p className="text-xs text-gray-400">{tenant?.name}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-medium text-gray-700">{fmtCurrency(l.rent)}</p>
+                  {alert
+                    ? <p className={`text-xs ${alert.color}`}>{days}d restantes</p>
+                    : <p className="text-xs text-gray-400">Vence {fmtDate(l.endDate)}</p>
+                  }
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
+}
 
+// ─── PROPERTIES ──────────────────────────────────────────────────────────────
 function Properties({ properties, setProperties, owners, leases }) {
   const [search,  setSearch]  = useState("");
   const [filter,  setFilter]  = useState("todos");
@@ -346,9 +312,7 @@ function Properties({ properties, setProperties, owners, leases }) {
       });
       if (!res.ok) throw new Error(await res.text());
       const saved = await res.json();
-      setProperties(prev =>
-        editing ? prev.map(p => p.id === editing ? saved : p) : [...prev, saved]
-      );
+      setProperties(prev => editing ? prev.map(p => p.id === editing ? saved : p) : [...prev, saved]);
       setModal(false);
     } catch (e) {
       alert("Error al guardar: " + e.message);
@@ -387,7 +351,7 @@ function Properties({ properties, setProperties, owners, leases }) {
           />
         </div>
         <div className="flex gap-1 bg-white border border-gray-200 rounded-xl p-1">
-          {["todos","ocupado","vacante"].map(f => (
+          {["todos", "ocupado", "vacante"].map(f => (
             <button key={f} onClick={() => setFilter(f)}
               className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all capitalize ${filter === f ? "bg-blue-600 text-white" : "text-gray-500 hover:text-gray-700"}`}>
               {f}
@@ -399,7 +363,6 @@ function Properties({ properties, setProperties, owners, leases }) {
       <div className="grid gap-3">
         {filtered.map(p => {
           const owner = owners.find(o => o.id === p.ownerId);
-          const lease = leases.find(l => l.id === p.leaseId);
           return (
             <div key={p.id} className="bg-white rounded-2xl border border-gray-100 p-5 hover:shadow-md transition-all">
               <div className="flex items-start justify-between gap-4">
@@ -447,18 +410,18 @@ function Properties({ properties, setProperties, owners, leases }) {
       <Modal open={modal} onClose={() => setModal(false)} title={editing ? "Editar Propiedad" : "Nueva Propiedad"} wide>
         <div className="space-y-4">
           <Field label="Dirección completa">
-            <Input placeholder="Av. Santa Fe 2450, Piso 3B" value={form.address} onChange={e => setForm({...form, address: e.target.value})} />
+            <Input placeholder="Av. Santa Fe 2450, Piso 3B" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} />
           </Field>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Tipo">
-              <Select value={form.type} onChange={e => setForm({...form, type: e.target.value})}>
-                {["Departamento","Casa","Local Comercial","Oficina","Galpón","Terreno","Otro"].map(t => (
+              <Select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
+                {["Departamento", "Casa", "Local Comercial", "Oficina", "Galpón", "Terreno", "Otro"].map(t => (
                   <option key={t}>{t}</option>
                 ))}
               </Select>
             </Field>
             <Field label="Estado">
-              <Select value={form.status} onChange={e => setForm({...form, status: e.target.value})}>
+              <Select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
                 <option value="vacante">Vacante</option>
                 <option value="ocupado">Ocupado</option>
               </Select>
@@ -466,10 +429,10 @@ function Properties({ properties, setProperties, owners, leases }) {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Precio lista (ARS)">
-              <Input type="number" placeholder="Ej: 320000" value={form.price} onChange={e => setForm({...form, price: e.target.value})} />
+              <Input type="number" placeholder="Ej: 320000" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} />
             </Field>
             <Field label="Propietario">
-              <Select value={form.ownerId} onChange={e => setForm({...form, ownerId: e.target.value})}>
+              <Select value={form.ownerId} onChange={e => setForm({ ...form, ownerId: e.target.value })}>
                 <option value="">Seleccionar...</option>
                 {owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
               </Select>
@@ -489,14 +452,13 @@ function Properties({ properties, setProperties, owners, leases }) {
   );
 }
 
-// ─── CONTACTS ─────────────────────────────────────────────────────────────────
-
+// ─── CONTACTS ────────────────────────────────────────────────────────────────
 function Contacts({ owners, setOwners, tenants, setTenants, properties, leases }) {
-  const [tab,    setTab]    = useState("owners");
-  const [modal,  setModal]  = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [tab,     setTab]     = useState("owners");
+  const [modal,   setModal]   = useState(false);
+  const [saving,  setSaving]  = useState(false);
+  const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: "", email: "", phone: "", role: "owner" });
-  const [editing, setEditing] = useState(null); // id del contacto en edición
 
   const openNew = () => {
     setEditing(null);
@@ -506,12 +468,7 @@ function Contacts({ owners, setOwners, tenants, setTenants, properties, leases }
 
   const openEdit = (person) => {
     setEditing(person.id);
-    setForm({
-      name: person.name,
-      email: person.email,
-      phone: person.phone || "",
-      role: tab === "owners" ? "owner" : "tenant"
-    });
+    setForm({ name: person.name, email: person.email, phone: person.phone || "", role: tab === "owners" ? "owner" : "tenant" });
     setModal(true);
   };
 
@@ -522,7 +479,7 @@ function Contacts({ owners, setOwners, tenants, setTenants, properties, leases }
     const method   = editing ? "PUT" : "POST";
     const url      = editing ? `${API}${endpoint}/${editing}` : `${API}${endpoint}`;
     try {
-      const res  = await fetch(url, {
+      const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: form.name, email: form.email, phone: form.phone }),
@@ -543,10 +500,8 @@ function Contacts({ owners, setOwners, tenants, setTenants, properties, leases }
     }
   };
 
-  const list = tab === "owners" ? owners : tenants;
-
   const del = async (id) => {
-    if (!confirm("¿Eliminar este contacto? Esta acción no se puede deshacer.")) return;
+    if (!confirm("¿Eliminar este contacto?")) return;
     const endpoint = tab === "owners" ? `/api/owners/${id}` : `/api/tenants/${id}`;
     try {
       const res = await fetch(`${API}${endpoint}`, { method: "DELETE" });
@@ -557,6 +512,8 @@ function Contacts({ owners, setOwners, tenants, setTenants, properties, leases }
       alert("Error al eliminar: " + e.message);
     }
   };
+
+  const list = tab === "owners" ? owners : tenants;
 
   return (
     <div className="space-y-6">
@@ -578,12 +535,8 @@ function Contacts({ owners, setOwners, tenants, setTenants, properties, leases }
 
       <div className="grid gap-3">
         {list.map(person => {
-          const personProperties = tab === "owners"
-            ? properties.filter(p => p.ownerId === person.id)
-            : [];
-          const lease = tab === "tenants"
-            ? leases.find(l => l.id === person.leaseId)
-            : null;
+          const personProperties = tab === "owners" ? properties.filter(p => p.ownerId === person.id) : [];
+          const lease = tab === "tenants" ? leases.find(l => l.id === person.leaseId) : null;
           return (
             <div key={person.id} className="bg-white rounded-2xl border border-gray-100 p-5 hover:shadow-md transition-all">
               <div className="flex items-start gap-4">
@@ -627,19 +580,19 @@ function Contacts({ owners, setOwners, tenants, setTenants, properties, leases }
       <Modal open={modal} onClose={() => { setModal(false); setEditing(null); }} title={editing ? "Editar Contacto" : "Nuevo Contacto"}>
         <div className="space-y-4">
           <Field label="Rol">
-            <Select value={form.role} onChange={e => setForm({...form, role: e.target.value})} disabled={!!editing}>
+            <Select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} disabled={!!editing}>
               <option value="owner">Propietario</option>
               <option value="tenant">Inquilino</option>
             </Select>
           </Field>
           <Field label="Nombre completo">
-            <Input placeholder="Ej: Juan Pérez" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
+            <Input placeholder="Ej: Juan Pérez" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
           </Field>
           <Field label="Email">
-            <Input type="email" placeholder="juan@email.com" value={form.email} onChange={e => setForm({...form, email: e.target.value})} />
+            <Input type="email" placeholder="juan@email.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
           </Field>
           <Field label="Teléfono" hint="Opcional">
-            <Input placeholder="+54 11 1234-5678" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} />
+            <Input placeholder="+54 11 1234-5678" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
           </Field>
           <div className="flex gap-3 pt-2">
             <button onClick={() => { setModal(false); setEditing(null); }} className="flex-1 px-4 py-2.5 border border-gray-200 text-sm font-medium text-gray-600 rounded-xl hover:bg-gray-50 transition-colors">
@@ -655,17 +608,67 @@ function Contacts({ owners, setOwners, tenants, setTenants, properties, leases }
   );
 }
 
-// ─── LEASES ───────────────────────────────────────────────────────────────────
-
+// ─── LEASES ──────────────────────────────────────────────────────────────────
 function Leases({ leases, setLeases, properties, tenants }) {
-  const [modal,  setModal]  = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [modal,   setModal]   = useState(false);
+  const [saving,  setSaving]  = useState(false);
+  const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ propertyId: "", tenantId: "", startDate: "", endDate: "", rent: "", increase: "6" });
-  const [editing, setEditing] = useState(null); // id del contrato en edición
+
+  // Separar contratos activos de finalizados
+  const activos     = leases.filter(l => l.status === "activo");
+  const finalizados = leases.filter(l => l.status !== "activo");
 
   const openNew = () => {
     setEditing(null);
     setForm({ propertyId: "", tenantId: "", startDate: "", endDate: "", rent: "", increase: "6" });
+    setModal(true);
+  };
+
+  const openEdit = (l) => {
+    setEditing(l.id);
+    setForm({
+      propertyId: l.propertyId,
+      tenantId:   l.tenantId,
+      startDate:  l.startDate,
+      endDate:    l.endDate,
+      rent:       String(l.rent),
+      increase:   String(l.increase),
+    });
+    setModal(true);
+  };
+
+  const save = async () => {
+    if (!form.propertyId || !form.tenantId || !form.startDate || !form.endDate || !form.rent) return;
+    setSaving(true);
+    try {
+      const method = editing ? "PUT" : "POST";
+      const url    = editing ? `${API}/api/leases/${editing}` : `${API}/api/leases`;
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, rent: Number(form.rent), increase: Number(form.increase) }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const saved = await res.json();
+      setLeases(prev => editing ? prev.map(l => l.id === editing ? saved : l) : [...prev, saved]);
+      setModal(false);
+    } catch (e) {
+      alert("Error al guardar: " + e.message);
+    } finally {
+      setSaving(false);
+      setEditing(null);
+    }
+  };
+
+  const del = async (id) => {
+    if (!confirm("¿Eliminar este contrato?")) return;
+    try {
+      await fetch(`${API}/api/leases/${id}`, { method: "DELETE" });
+      setLeases(prev => prev.filter(l => l.id !== id));
+    } catch (e) {
+      alert("Error al eliminar: " + e.message);
+    }
   };
 
   return (
@@ -717,13 +720,23 @@ function Leases({ leases, setLeases, properties, tenants }) {
                     </div>
                   </div>
                 </div>
-                <div className="flex flex-col gap-1 flex-shrink-0">
-                  <button onClick={() => openEdit(l)} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
-                    <Edit2 size={13} className="text-gray-400" />
-                  </button>
-                  <button onClick={() => del(l.id)} className="p-1.5 rounded-lg hover:bg-red-50 transition-colors mt-0.5">
-                    <Trash2 size={14} className="text-red-400" />
-                  </button>
+                <div className="flex items-start gap-2 flex-shrink-0">
+                  <div className="text-right">
+                    <p className="font-bold text-gray-900">{fmtCurrency(l.rent)}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">por mes</p>
+                    {alert
+                      ? <p className={`text-xs font-semibold mt-1 ${alert.color}`}>{days <= 0 ? "Vencido" : `${days} días restantes`}</p>
+                      : <Badge status={l.status} />
+                    }
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <button onClick={() => openEdit(l)} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+                      <Edit2 size={13} className="text-gray-400" />
+                    </button>
+                    <button onClick={() => del(l.id)} className="p-1.5 rounded-lg hover:bg-red-50 transition-colors">
+                      <Trash2 size={14} className="text-red-400" />
+                    </button>
+                  </div>
                 </div>
               </div>
               <div className="mt-4">
@@ -744,60 +757,54 @@ function Leases({ leases, setLeases, properties, tenants }) {
       </div>
 
       {/* Contratos finalizados */}
-      <div className="space-y-3 pt-8">
-        <h2 className="text-lg font-bold text-gray-700 mb-2">Contratos Finalizados</h2>
-        {finalizados.length === 0 && (
-          <div className="bg-white rounded-2xl border border-gray-100 py-10 text-center">
-            <CheckCircle size={32} className="text-emerald-400 mx-auto mb-2" />
-            <p className="font-medium text-gray-500">No hay contratos finalizados</p>
-          </div>
-        )}
-        {finalizados.map(l => {
-          const prop   = properties.find(p => p.id === l.propertyId);
-          const tenant = tenants.find(t => t.id === l.tenantId);
-          return (
-            <div key={l.id} className="bg-white rounded-2xl border-2 border-black p-5 flex items-center justify-between hover:shadow-md transition-all">
-              <div>
-                <p className="font-semibold text-gray-800 truncate">{prop?.address}</p>
-                <p className="text-sm text-gray-500 mt-0.5">{tenant?.name}</p>
-                <span className="inline-block mt-2 px-3 py-1 text-xs font-bold rounded-full bg-gray-200 text-gray-700">Finalizado</span>
+      {finalizados.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-lg font-bold text-gray-700">Contratos Finalizados</h2>
+          {finalizados.map(l => {
+            const prop   = properties.find(p => p.id === l.propertyId);
+            const tenant = tenants.find(t => t.id === l.tenantId);
+            return (
+              <div key={l.id} className="bg-white rounded-2xl border border-gray-200 p-5 flex items-center justify-between hover:shadow-md transition-all">
+                <div>
+                  <p className="font-semibold text-gray-800 truncate">{prop?.address}</p>
+                  <p className="text-sm text-gray-500 mt-0.5">{tenant?.name}</p>
+                  <Badge status={l.status} />
+                </div>
+                <button onClick={() => del(l.id)} className="p-2 rounded-lg hover:bg-red-50 transition-colors">
+                  <Trash2 size={16} className="text-red-400" />
+                </button>
               </div>
-              <button onClick={() => del(l.id)} className="p-2 rounded-lg hover:bg-red-50 transition-colors">
-                <Trash2 size={16} className="text-red-400" />
-              </button>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       <Modal open={modal} onClose={() => { setModal(false); setEditing(null); }} title={editing ? "Editar Contrato" : "Nuevo Contrato"} wide>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Field label="Propiedad">
-              <Select value={form.propertyId} onChange={e => setForm({...form, propertyId: e.target.value})}>
+              <Select value={form.propertyId} onChange={e => setForm({ ...form, propertyId: e.target.value })}>
                 <option value="">Seleccionar...</option>
-                {properties.map(p =>
-                  <option key={p.id} value={p.id}>{p.address}</option>
-                )}
+                {properties.map(p => <option key={p.id} value={p.id}>{p.address}</option>)}
               </Select>
             </Field>
             <Field label="Inquilino">
-              <Select value={form.tenantId} onChange={e => setForm({...form, tenantId: e.target.value})}>
+              <Select value={form.tenantId} onChange={e => setForm({ ...form, tenantId: e.target.value })}>
                 <option value="">Seleccionar...</option>
                 {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </Select>
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Fecha de inicio"><Input type="date" value={form.startDate} onChange={e => setForm({...form, startDate: e.target.value})} /></Field>
-            <Field label="Fecha de fin">   <Input type="date" value={form.endDate}   onChange={e => setForm({...form, endDate:    e.target.value})} /></Field>
+            <Field label="Fecha de inicio"><Input type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} /></Field>
+            <Field label="Fecha de fin">   <Input type="date" value={form.endDate}   onChange={e => setForm({ ...form, endDate:    e.target.value })} /></Field>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Renta mensual (ARS)">
-              <Input type="number" placeholder="Ej: 350000" value={form.rent} onChange={e => setForm({...form, rent: e.target.value})} />
+              <Input type="number" placeholder="Ej: 350000" value={form.rent} onChange={e => setForm({ ...form, rent: e.target.value })} />
             </Field>
             <Field label="Aumento anual (%)" hint="Cláusula de ajuste por año">
-              <Input type="number" placeholder="Ej: 6" value={form.increase} onChange={e => setForm({...form, increase: e.target.value})} />
+              <Input type="number" placeholder="Ej: 6" value={form.increase} onChange={e => setForm({ ...form, increase: e.target.value })} />
             </Field>
           </div>
           <div className="flex gap-3 pt-2">
@@ -815,12 +822,9 @@ function Leases({ leases, setLeases, properties, tenants }) {
 }
 
 // ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
-
 function Notifications({ leases, properties, tenants }) {
-  // Mostrar solo contratos activos y no vencidos en alertas
-  const today = new Date();
   const notifications = leases
-    .filter(l => l.status === "activo" && new Date(l.endDate) >= today)
+    .filter(l => l.status === "activo" && new Date(l.endDate) >= new Date())
     .map(l => {
       const days  = diffDays(l.endDate);
       const level = getAlertLevel(days);
@@ -838,6 +842,7 @@ function Notifications({ leases, properties, tenants }) {
         <h1 className="text-2xl font-bold text-gray-900">Notificaciones</h1>
         <p className="text-sm text-gray-500 mt-1">Sistema de alertas de vencimiento de contratos</p>
       </div>
+
       <div className="grid grid-cols-3 gap-3">
         {[
           { label: "15 días o menos", color: "bg-red-500",    desc: "Crítico — acción inmediata" },
@@ -847,18 +852,19 @@ function Notifications({ leases, properties, tenants }) {
           <div key={label} className="bg-white rounded-xl border border-gray-100 p-4 flex items-start gap-3">
             <div className={`w-3 h-3 rounded-full mt-0.5 flex-shrink-0 ${color}`} />
             <div>
-              <p className="font-semibold text-gray-800">{label}</p>
-              <p className="text-xs text-gray-500">{desc}</p>
+              <p className="text-sm font-medium text-gray-700">{label}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{desc}</p>
             </div>
           </div>
         ))}
       </div>
-      {/* Alertas activas */}
+
       <div className="space-y-3">
         {notifications.length === 0 && (
           <div className="bg-white rounded-2xl border border-gray-100 py-16 text-center">
-            <Bell size={36} className="text-gray-200 mx-auto mb-3" />
-            <p className="font-medium text-gray-500">Sin alertas activas</p>
+            <CheckCircle size={36} className="text-emerald-400 mx-auto mb-3" />
+            <p className="font-medium text-gray-700">Sin alertas activas</p>
+            <p className="text-sm text-gray-400 mt-1">Todos los contratos están en regla</p>
           </div>
         )}
         {notifications.map(a => (
@@ -875,7 +881,7 @@ function Notifications({ leases, properties, tenants }) {
           </div>
         ))}
       </div>
-      {/* Contratos OK */}
+
       {ok.length > 0 && (
         <div>
           <p className="text-sm font-medium text-gray-500 mb-3">Contratos sin alertas ({ok.length})</p>
@@ -899,32 +905,9 @@ function Notifications({ leases, properties, tenants }) {
       )}
     </div>
   );
-        <div>
-          <p className="text-sm font-medium text-gray-500 mb-3">Contratos sin alertas ({ok.length})</p>
-          <div className="space-y-2">
-            {ok.map(l => {
-              const prop   = properties.find(p => p.id === l.propertyId);
-              const tenant = tenants.find(t => t.id === l.tenantId);
-              return (
-                <div key={l.id} className="bg-white rounded-xl border border-gray-100 px-4 py-3 flex items-center gap-3">
-                  <CheckCircle size={14} className="text-emerald-400 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-700 truncate">{prop?.address}</p>
-                    <p className="text-xs text-gray-400">{tenant?.name}</p>
-                  </div>
-                  <p className="text-xs text-gray-400 flex-shrink-0">Vence {fmtDate(l.endDate)}</p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );  
 }
 
-// ─── SIDEBAR ──────────────────────────────────────────────────────────────────
-
+// ─── SIDEBAR ─────────────────────────────────────────────────────────────────
 const NAV = [
   { id: "dashboard",     label: "Dashboard",   icon: LayoutDashboard },
   { id: "properties",    label: "Propiedades", icon: Building2 },
@@ -986,42 +969,38 @@ function Sidebar({ active, setActive, alertCount }) {
 }
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
-
 function App() {
   const [active, setActive] = useState("dashboard");
-  // ── Carga de datos desde la API ─────────────────────────────
-  const { data: properties, setData: setProperties, loading: lProps,   error: eProps,   reload: reloadProps }  = useApi("/api/properties");
-  const { data: owners,     setData: setOwners,     loading: lOwners,  error: eOwners,  reload: reloadOwners } = useApi("/api/owners");
-  const { data: tenants,    setData: setTenants,    loading: lTenants, error: eTenants, reload: reloadTenants }= useApi("/api/tenants");
-  const { data: leases,     setData: setLeases,     loading: lLeases,  error: eLeases,  reload: reloadLeases } = useApi("/api/leases");
+
+  const { data: properties, setData: setProperties, loading: lProps,   error: eProps,   reload: reloadProps }   = useApi("/api/properties");
+  const { data: owners,     setData: setOwners,     loading: lOwners,  error: eOwners,  reload: reloadOwners }  = useApi("/api/owners");
+  const { data: tenants,    setData: setTenants,    loading: lTenants, error: eTenants, reload: reloadTenants } = useApi("/api/tenants");
+  const { data: leases,     setData: setLeases,     loading: lLeases,  error: eLeases,  reload: reloadLeases }  = useApi("/api/leases");
 
   const loading = lProps || lOwners || lTenants || lLeases;
   const error   = eProps || eOwners || eTenants || eLeases;
 
-  // --- ALERTA: badge sólo si no fue vista en las últimas 24h ---
   const alertCountRaw = useMemo(
     () => leases.filter(l => l.status === "activo" && getAlertLevel(diffDays(l.endDate))).length,
     [leases]
   );
+
   const [showAlertBadge, setShowAlertBadge] = useState(false);
 
   useEffect(() => {
-    // Al cargar, decidir si mostrar el badge
     const lastSeen = localStorage.getItem("alertas_last_seen");
     if (!lastSeen) {
       setShowAlertBadge(alertCountRaw > 0);
       return;
     }
     const last = Number(lastSeen);
-    const now = Date.now();
-    if (now - last > 24 * 60 * 60 * 1000) {
+    if (Date.now() - last > 24 * 60 * 60 * 1000) {
       setShowAlertBadge(alertCountRaw > 0);
     } else {
       setShowAlertBadge(false);
     }
   }, [alertCountRaw]);
 
-  // Al entrar a la sección de alertas, guardar timestamp y ocultar badge
   const handleSetActive = (id) => {
     setActive(id);
     if (id === "notifications") {
@@ -1070,11 +1049,6 @@ function App() {
       </main>
     </div>
   );
-
-
-
-export default App;
+}
 
 export default App;
-
-
