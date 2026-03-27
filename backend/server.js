@@ -362,6 +362,17 @@ app.put("/api/owners/:id", async (req, res) => {
   }
 });
 
+// DELETE /api/owners/:id (baja lógica)
+app.delete("/api/owners/:id", async (req, res) => {
+  try {
+    await pool.query("UPDATE personas SET activo = 0 WHERE id = ?", [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al eliminar propietario" });
+  }
+});
+
 // ─── INQUILINOS ──────────────────────────────────────────────
 
 // GET /api/tenants
@@ -448,7 +459,16 @@ app.put("/api/tenants/:id", async (req, res) => {
     res.status(500).json({ error: "Error al actualizar inquilino" });
   }
 });
-
+// DELETE /api/tenants/:id (baja lógica)
+app.delete("/api/tenants/:id", async (req, res) => {
+  try {
+    await pool.query("UPDATE personas SET activo = 0 WHERE id = ?", [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al eliminar inquilino" });
+  }
+});
 // ─── CONTRATOS ───────────────────────────────────────────────
 
 // GET /api/leases
