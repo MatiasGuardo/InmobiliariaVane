@@ -296,14 +296,12 @@ app.get("/api/owners", async (_req, res) => {
 // POST /api/owners
 app.post("/api/owners", async (req, res) => {
   const { name, email, phone } = req.body;
-
   if (!name || !email) {
     return res.status(400).json({ error: "Faltan campos obligatorios: name, email" });
   }
-
-  const [apellido, ...restoArr] = name.trim().split(" ").reverse();
-  const nombre   = restoArr.reverse().join(" ") || apellido;
-
+  const parts = name.trim().split(" ");
+  const apellido = parts.length > 1 ? parts.at(-1) : "";
+  const nombre   = parts.length > 1 ? parts.slice(0, -1).join(" ") : parts[0];
   try {
     const [result] = await pool.query(
       `INSERT INTO personas
@@ -311,12 +309,10 @@ app.post("/api/owners", async (req, res) => {
        VALUES ('propietario', ?, ?, 'DNI', ?, ?, ?, 1)`,
       [nombre, apellido, `TMP-${Date.now()}`, phone || null, email]
     );
-
     const [[row]] = await pool.query(
       "SELECT *, NULL AS properties FROM personas WHERE id = ?",
       [result.insertId]
     );
-
     res.status(201).json(mapOwner({ ...row, properties: null }));
   } catch (err) {
     if (err.code === "ER_DUP_ENTRY") {
@@ -324,6 +320,36 @@ app.post("/api/owners", async (req, res) => {
     }
     console.error(err);
     res.status(500).json({ error: "Error al crear propietario" });
+  }
+});
+
+// PUT /api/owners/:id
+app.put("/api/owners/:id", async (req, res) => {
+  const { id } = req.params;
+  const { name, email, phone } = req.body;
+  if (!name || !email) {
+    return res.status(400).json({ error: "Faltan campos obligatorios: name, email" });
+  }
+  const parts = name.trim().split(" ");
+  const apellido = parts.length > 1 ? parts.at(-1) : "";
+  const nombre   = parts.length > 1 ? parts.slice(0, -1).join(" ") : parts[0];
+  try {
+    await pool.query(
+      `UPDATE personas SET nombre = ?, apellido = ?, email = ?, telefono = ? WHERE id = ? AND (tipo_persona = 'propietario' OR tipo_persona = 'ambos')`,
+      [nombre, apellido, email, phone || null, id]
+    );
+    const [[row]] = await pool.query(
+      `SELECT pe.*, GROUP_CONCAT(pr.id ORDER BY pr.id) AS properties
+       FROM personas pe
+       LEFT JOIN propiedades pr ON pr.id_propietario = pe.id AND pr.activo = 1
+       WHERE pe.id = ?
+       GROUP BY pe.id`,
+      [id]
+    );
+    res.json(mapOwner(row));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al actualizar propietario" });
   }
 });
 
@@ -357,15 +383,12 @@ app.get("/api/tenants", async (_req, res) => {
 // POST /api/tenants
 app.post("/api/tenants", async (req, res) => {
   const { name, email, phone } = req.body;
-
   if (!name || !email) {
     return res.status(400).json({ error: "Faltan campos obligatorios: name, email" });
   }
-
-  const parts    = name.trim().split(" ");
-  const apellido = parts.at(-1);
-  const nombre   = parts.slice(0, -1).join(" ") || apellido;
-
+  const parts = name.trim().split(" ");
+  const apellido = parts.length > 1 ? parts.at(-1) : "";
+  const nombre   = parts.length > 1 ? parts.slice(0, -1).join(" ") : parts[0];
   try {
     const [result] = await pool.query(
       `INSERT INTO personas
@@ -373,7 +396,6 @@ app.post("/api/tenants", async (req, res) => {
        VALUES ('inquilino', ?, ?, 'DNI', ?, ?, ?, 1)`,
       [nombre, apellido, `TMP-${Date.now()}`, phone || null, email]
     );
-
     res.status(201).json({
       id:      String(result.insertId),
       name,
@@ -387,6 +409,34 @@ app.post("/api/tenants", async (req, res) => {
     }
     console.error(err);
     res.status(500).json({ error: "Error al crear inquilino" });
+  }
+});
+
+// PUT /api/tenants/:id
+app.put("/api/tenants/:id", async (req, res) => {
+  const { id } = req.params;
+  const { name, email, phone } = req.body;
+  if (!name || !email) {
+    return res.status(400).json({ error: "Faltan campos obligatorios: name, email" });
+  }
+  const parts = name.trim().split(" ");
+  const apellido = parts.length > 1 ? parts.at(-1) : "";
+  const nombre   = parts.length > 1 ? parts.slice(0, -1).join(" ") : parts[0];
+  try {
+    await pool.query(
+      `UPDATE personas SET nombre = ?, apellido = ?, email = ?, telefono = ? WHERE id = ? AND (tipo_persona = 'inquilino' OR tipo_persona = 'ambos')`,
+      [nombre, apellido, email, phone || null, id]
+    );
+    const [[row]] = await pool.query(
+      `SELECT pe.*,
+        (SELECT c.id FROM contratos c WHERE c.inquilino_id = pe.id AND c.estado_contrato = 'activo' LIMIT 1) AS leaseId
+       FROM personas pe WHERE pe.id = ?`,
+      [id]
+    );
+    res.json(mapTenant(row));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al actualizar inquilino" });
   }
 });
 
@@ -411,22 +461,18 @@ app.get("/api/leases", async (_req, res) => {
 // POST /api/leases
 app.post("/api/leases", async (req, res) => {
   const { propertyId, tenantId, startDate, endDate, rent, increase } = req.body;
-
   if (!propertyId || !tenantId || !startDate || !endDate || !rent) {
     return res.status(400).json({ error: "Faltan campos obligatorios" });
   }
-
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-
     // Buscar el propietario de la propiedad
     const [[prop]] = await conn.query(
       "SELECT id_propietario FROM propiedades WHERE id = ?",
       [propertyId]
     );
     if (!prop) throw new Error("Propiedad no encontrada");
-
     const [result] = await conn.query(
       `INSERT INTO contratos
          (propiedad_id, inquilino_id, propietario_id, fecha_inicio, fecha_fin,
@@ -442,15 +488,12 @@ app.post("/api/leases", async (req, res) => {
         increase ? `${increase}% anual` : null,
       ]
     );
-
     // Marcar la propiedad como alquilada
     await conn.query(
       "UPDATE propiedades SET estado = 'alquilada' WHERE id = ?",
       [propertyId]
     );
-
     await conn.commit();
-
     res.status(201).json({
       id:         String(result.insertId),
       propertyId: String(propertyId),
@@ -465,6 +508,52 @@ app.post("/api/leases", async (req, res) => {
     await conn.rollback();
     console.error(err);
     res.status(500).json({ error: err.message || "Error al crear contrato" });
+  } finally {
+    conn.release();
+  }
+});
+
+// PUT /api/leases/:id
+app.put("/api/leases/:id", async (req, res) => {
+  const { id } = req.params;
+  const { propertyId, tenantId, startDate, endDate, rent, increase, status } = req.body;
+  if (!propertyId || !tenantId || !startDate || !endDate || !rent) {
+    return res.status(400).json({ error: "Faltan campos obligatorios" });
+  }
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    // Buscar el propietario de la propiedad
+    const [[prop]] = await conn.query(
+      "SELECT id_propietario FROM propiedades WHERE id = ?",
+      [propertyId]
+    );
+    if (!prop) throw new Error("Propiedad no encontrada");
+    await conn.query(
+      `UPDATE contratos SET propiedad_id = ?, inquilino_id = ?, propietario_id = ?, fecha_inicio = ?, fecha_fin = ?, monto_renta = ?, indice_ajuste = ?, estado_contrato = ? WHERE id = ?`,
+      [
+        propertyId,
+        tenantId,
+        prop.id_propietario,
+        startDate,
+        endDate,
+        rent,
+        increase ? `${increase}% anual` : null,
+        status || "activo",
+        id
+      ]
+    );
+    await conn.commit();
+    // Devolver el contrato actualizado
+    const [[row]] = await conn.query(
+      `SELECT * FROM contratos WHERE id = ?`,
+      [id]
+    );
+    res.json(mapLease(row));
+  } catch (err) {
+    await conn.rollback();
+    console.error(err);
+    res.status(500).json({ error: err.message || "Error al actualizar contrato" });
   } finally {
     conn.release();
   }

@@ -536,26 +536,50 @@ function Contacts({ owners, setOwners, tenants, setTenants, properties, leases }
   const [modal,  setModal]  = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", phone: "", role: "owner" });
+  const [editing, setEditing] = useState(null); // id del contacto en edición
+
+  const openNew = () => {
+    setEditing(null);
+    setForm({ name: "", email: "", phone: "", role: tab === "owners" ? "owner" : "tenant" });
+    setModal(true);
+  };
+
+  const openEdit = (person) => {
+    setEditing(person.id);
+    setForm({
+      name: person.name,
+      email: person.email,
+      phone: person.phone || "",
+      role: tab === "owners" ? "owner" : "tenant"
+    });
+    setModal(true);
+  };
 
   const save = async () => {
     if (!form.name || !form.email) return;
     setSaving(true);
     const endpoint = form.role === "owner" ? "/api/owners" : "/api/tenants";
+    const method   = editing ? "PUT" : "POST";
+    const url      = editing ? `${API}${endpoint}/${editing}` : `${API}${endpoint}`;
     try {
-      const res  = await fetch(`${API}${endpoint}`, {
-        method:  "POST",
+      const res  = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: form.name, email: form.email, phone: form.phone }),
       });
       if (!res.ok) throw new Error(await res.text());
       const saved = await res.json();
-      if (form.role === "owner") setOwners(prev => [...prev, saved]);
-      else                       setTenants(prev => [...prev, saved]);
+      if (form.role === "owner") {
+        setOwners(prev => editing ? prev.map(o => o.id === editing ? saved : o) : [...prev, saved]);
+      } else {
+        setTenants(prev => editing ? prev.map(t => t.id === editing ? saved : t) : [...prev, saved]);
+      }
       setModal(false);
     } catch (e) {
       alert("Error al guardar: " + e.message);
     } finally {
       setSaving(false);
+      setEditing(null);
     }
   };
 
@@ -581,7 +605,7 @@ function Contacts({ owners, setOwners, tenants, setTenants, properties, leases }
           <h1 className="text-2xl font-bold text-gray-900">Contactos</h1>
           <p className="text-sm text-gray-500 mt-1">{owners.length} propietarios · {tenants.length} inquilinos</p>
         </div>
-        <button onClick={() => { setForm({ name: "", email: "", phone: "", role: tab === "owners" ? "owner" : "tenant" }); setModal(true); }}
+        <button onClick={openNew}
           className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200">
           <Plus size={16} /> Nuevo Contacto
         </button>
@@ -619,9 +643,14 @@ function Contacts({ owners, setOwners, tenants, setTenants, properties, leases }
                     <p className="text-xs text-emerald-600 mt-1.5">Contrato activo · Vence {fmtDate(lease.endDate)}</p>
                   )}
                 </div>
-                <button onClick={() => del(person.id)} className="p-1.5 rounded-lg hover:bg-red-50 transition-colors flex-shrink-0">
-                  <Trash2 size={14} className="text-red-400" />
-                </button>
+                <div className="flex flex-col gap-1 flex-shrink-0">
+                  <button onClick={() => openEdit(person)} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+                    <Edit2 size={13} className="text-gray-400" />
+                  </button>
+                  <button onClick={() => del(person.id)} className="p-1.5 rounded-lg hover:bg-red-50 transition-colors">
+                    <Trash2 size={14} className="text-red-400" />
+                  </button>
+                </div>
               </div>
             </div>
           );
@@ -635,10 +664,10 @@ function Contacts({ owners, setOwners, tenants, setTenants, properties, leases }
         )}
       </div>
 
-      <Modal open={modal} onClose={() => setModal(false)} title="Nuevo Contacto">
+      <Modal open={modal} onClose={() => { setModal(false); setEditing(null); }} title={editing ? "Editar Contacto" : "Nuevo Contacto"}>
         <div className="space-y-4">
           <Field label="Rol">
-            <Select value={form.role} onChange={e => setForm({...form, role: e.target.value})}>
+            <Select value={form.role} onChange={e => setForm({...form, role: e.target.value})} disabled={!!editing}>
               <option value="owner">Propietario</option>
               <option value="tenant">Inquilino</option>
             </Select>
@@ -653,11 +682,11 @@ function Contacts({ owners, setOwners, tenants, setTenants, properties, leases }
             <Input placeholder="+54 11 1234-5678" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} />
           </Field>
           <div className="flex gap-3 pt-2">
-            <button onClick={() => setModal(false)} className="flex-1 px-4 py-2.5 border border-gray-200 text-sm font-medium text-gray-600 rounded-xl hover:bg-gray-50 transition-colors">
+            <button onClick={() => { setModal(false); setEditing(null); }} className="flex-1 px-4 py-2.5 border border-gray-200 text-sm font-medium text-gray-600 rounded-xl hover:bg-gray-50 transition-colors">
               Cancelar
             </button>
             <button onClick={save} disabled={saving} className="flex-1 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors">
-              {saving ? "Guardando…" : "Crear Contacto"}
+              {saving ? "Guardando…" : (editing ? "Actualizar" : "Crear Contacto")}
             </button>
           </div>
         </div>
@@ -672,6 +701,27 @@ function Leases({ leases, setLeases, properties, tenants }) {
   const [modal,  setModal]  = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ propertyId: "", tenantId: "", startDate: "", endDate: "", rent: "", increase: "6" });
+  const [editing, setEditing] = useState(null); // id del contrato en edición
+
+  const openNew = () => {
+    setEditing(null);
+    setForm({ propertyId: "", tenantId: "", startDate: "", endDate: "", rent: "", increase: "6" });
+    setModal(true);
+  };
+
+  const openEdit = (l) => {
+    setEditing(l.id);
+    setForm({
+      propertyId: l.propertyId,
+      tenantId: l.tenantId,
+      startDate: l.startDate,
+      endDate: l.endDate,
+      rent: l.rent,
+      increase: l.increase,
+      status: l.status
+    });
+    setModal(true);
+  };
 
   const del = async (id) => {
     if (!confirm("¿Eliminar este contrato? Esta acción no se puede deshacer.")) return;
@@ -687,20 +737,23 @@ function Leases({ leases, setLeases, properties, tenants }) {
   const save = async () => {
     if (!form.propertyId || !form.tenantId || !form.startDate || !form.endDate || !form.rent) return;
     setSaving(true);
+    const method = editing ? "PUT" : "POST";
+    const url    = editing ? `${API}/api/leases/${editing}` : `${API}/api/leases`;
     try {
-      const res = await fetch(`${API}/api/leases`, {
-        method:  "POST",
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, rent: Number(form.rent), increase: Number(form.increase) }),
       });
       if (!res.ok) throw new Error(await res.text());
       const saved = await res.json();
-      setLeases(prev => [...prev, saved]);
+      setLeases(prev => editing ? prev.map(l => l.id === editing ? saved : l) : [...prev, saved]);
       setModal(false);
     } catch (e) {
       alert("Error al guardar: " + e.message);
     } finally {
       setSaving(false);
+      setEditing(null);
     }
   };
 
@@ -711,7 +764,7 @@ function Leases({ leases, setLeases, properties, tenants }) {
           <h1 className="text-2xl font-bold text-gray-900">Contratos</h1>
           <p className="text-sm text-gray-500 mt-1">{leases.filter(l => l.status === "activo").length} contratos activos</p>
         </div>
-        <button onClick={() => { setForm({ propertyId: "", tenantId: "", startDate: "", endDate: "", rent: "", increase: "6" }); setModal(true); }}
+        <button onClick={openNew}
           className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200">
           <Plus size={16} /> Nuevo Contrato
         </button>
@@ -746,15 +799,10 @@ function Leases({ leases, setLeases, properties, tenants }) {
                     </div>
                   </div>
                 </div>
-                <div className="flex items-start gap-3 flex-shrink-0">
-                  <div className="text-right">
-                    <p className="font-bold text-gray-900">{fmtCurrency(l.rent)}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">por mes</p>
-                    {alert
-                      ? <p className={`text-xs font-semibold mt-1 ${alert.color}`}>{days <= 0 ? "Vencido" : `${days} días restantes`}</p>
-                      : <Badge status={l.status} />
-                    }
-                  </div>
+                <div className="flex flex-col gap-1 flex-shrink-0">
+                  <button onClick={() => openEdit(l)} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+                    <Edit2 size={13} className="text-gray-400" />
+                  </button>
                   <button onClick={() => del(l.id)} className="p-1.5 rounded-lg hover:bg-red-50 transition-colors mt-0.5">
                     <Trash2 size={14} className="text-red-400" />
                   </button>
@@ -783,13 +831,13 @@ function Leases({ leases, setLeases, properties, tenants }) {
         )}
       </div>
 
-      <Modal open={modal} onClose={() => setModal(false)} title="Nuevo Contrato" wide>
+      <Modal open={modal} onClose={() => { setModal(false); setEditing(null); }} title={editing ? "Editar Contrato" : "Nuevo Contrato"} wide>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Field label="Propiedad">
               <Select value={form.propertyId} onChange={e => setForm({...form, propertyId: e.target.value})}>
                 <option value="">Seleccionar...</option>
-                {properties.filter(p => p.status === "vacante").map(p =>
+                {properties.map(p =>
                   <option key={p.id} value={p.id}>{p.address}</option>
                 )}
               </Select>
@@ -814,11 +862,11 @@ function Leases({ leases, setLeases, properties, tenants }) {
             </Field>
           </div>
           <div className="flex gap-3 pt-2">
-            <button onClick={() => setModal(false)} className="flex-1 px-4 py-2.5 border border-gray-200 text-sm font-medium text-gray-600 rounded-xl hover:bg-gray-50 transition-colors">
+            <button onClick={() => { setModal(false); setEditing(null); }} className="flex-1 px-4 py-2.5 border border-gray-200 text-sm font-medium text-gray-600 rounded-xl hover:bg-gray-50 transition-colors">
               Cancelar
             </button>
             <button onClick={save} disabled={saving} className="flex-1 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors">
-              {saving ? "Guardando…" : "Crear Contrato"}
+              {saving ? "Guardando…" : (editing ? "Actualizar" : "Crear Contrato")}
             </button>
           </div>
         </div>
@@ -992,9 +1040,8 @@ function Sidebar({ active, setActive, alertCount }) {
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 
-export default function App() {
+function App() {
   const [active, setActive] = useState("dashboard");
-
   // ── Carga de datos desde la API ─────────────────────────────
   const { data: properties, setData: setProperties, loading: lProps,   error: eProps,   reload: reloadProps }  = useApi("/api/properties");
   const { data: owners,     setData: setOwners,     loading: lOwners,  error: eOwners,  reload: reloadOwners } = useApi("/api/owners");
@@ -1004,10 +1051,37 @@ export default function App() {
   const loading = lProps || lOwners || lTenants || lLeases;
   const error   = eProps || eOwners || eTenants || eLeases;
 
-  const alertCount = useMemo(
+  // --- ALERTA: badge sólo si no fue vista en las últimas 24h ---
+  const alertCountRaw = useMemo(
     () => leases.filter(l => l.status === "activo" && getAlertLevel(diffDays(l.endDate))).length,
     [leases]
   );
+  const [showAlertBadge, setShowAlertBadge] = useState(false);
+
+  useEffect(() => {
+    // Al cargar, decidir si mostrar el badge
+    const lastSeen = localStorage.getItem("alertas_last_seen");
+    if (!lastSeen) {
+      setShowAlertBadge(alertCountRaw > 0);
+      return;
+    }
+    const last = Number(lastSeen);
+    const now = Date.now();
+    if (now - last > 24 * 60 * 60 * 1000) {
+      setShowAlertBadge(alertCountRaw > 0);
+    } else {
+      setShowAlertBadge(false);
+    }
+  }, [alertCountRaw]);
+
+  // Al entrar a la sección de alertas, guardar timestamp y ocultar badge
+  const handleSetActive = (id) => {
+    setActive(id);
+    if (id === "notifications") {
+      localStorage.setItem("alertas_last_seen", String(Date.now()));
+      setShowAlertBadge(false);
+    }
+  };
 
   const shared = { properties, setProperties, owners, setOwners, tenants, setTenants, leases, setLeases };
 
@@ -1037,7 +1111,7 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen bg-gray-50/80 font-sans">
-      <Sidebar active={active} setActive={setActive} alertCount={alertCount} />
+      <Sidebar active={active} setActive={handleSetActive} alertCount={showAlertBadge ? alertCountRaw : 0} />
       <main className="flex-1 overflow-auto">
         <div className="max-w-5xl mx-auto px-6 py-8">
           {active === "dashboard"     && <Dashboard     {...shared} />}
@@ -1050,3 +1124,6 @@ export default function App() {
     </div>
   );
 }
+
+export default App;
+
