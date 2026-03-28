@@ -18,7 +18,6 @@ function RentCalculator({ lease, onClose }) {
   const maxPeriods = Math.max(1, Math.ceil(24 / periodInfo.months));
   const rate = lease.increase / 100;
 
-  // Construir filas: actual + un fila por ajuste
   const rows = [];
   let rent = lease.rent;
   for (let i = 0; i <= numPeriods; i++) {
@@ -43,7 +42,6 @@ function RentCalculator({ lease, onClose }) {
       </div>
 
       <div className="p-5 space-y-4">
-        {/* Datos del contrato */}
         <div className="grid grid-cols-3 gap-2">
           {[
             { label: "Renta base",   value: fmtCurrency(lease.rent) },
@@ -57,17 +55,12 @@ function RentCalculator({ lease, onClose }) {
           ))}
         </div>
 
-        {/* Slider */}
         <div>
           <div className="flex justify-between items-center mb-2">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Número de ajustes
-            </label>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Número de ajustes</label>
             <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
               {numPeriods} {numPeriods === 1 ? "ajuste" : "ajustes"}
-              <span className="font-normal text-gray-400 dark:text-gray-500 ml-1">
-                ({numPeriods * periodInfo.months} meses)
-              </span>
+              <span className="font-normal text-gray-400 dark:text-gray-500 ml-1">({numPeriods * periodInfo.months} meses)</span>
             </span>
           </div>
           <input
@@ -82,7 +75,6 @@ function RentCalculator({ lease, onClose }) {
           </div>
         </div>
 
-        {/* Tabla proyección */}
         <div className="rounded-xl overflow-hidden border border-gray-100 dark:border-gray-700">
           <div className="grid grid-cols-3 bg-gray-50 dark:bg-gray-700/50 px-4 py-2">
             {["Período", "Fecha", "Renta"].map((h, i) => (
@@ -108,15 +100,12 @@ function RentCalculator({ lease, onClose }) {
           })}
         </div>
 
-        {/* Resultado final */}
         <div className="flex items-center justify-between p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-100 dark:border-emerald-800">
           <div>
             <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
               Después de {numPeriods} {numPeriods === 1 ? "ajuste" : "ajustes"} ({numPeriods * periodInfo.months} meses)
             </p>
-            <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-0.5">
-              Incremento total acumulado: +{totalPct}%
-            </p>
+            <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-0.5">Incremento total: +{totalPct}%</p>
           </div>
           <div className="text-right">
             <p className="text-xl font-black text-emerald-700 dark:text-emerald-400">{fmtCurrency(finalRent)}</p>
@@ -197,7 +186,7 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
   const [renewTarget, setRenewTarget] = useState(null);
   const [formError,   setFormError]   = useState("");
   const [renewError,  setRenewError]  = useState("");
-  const [calcOpen,    setCalcOpen]    = useState(null); // id del contrato con calculadora abierta
+  const [calcOpen,    setCalcOpen]    = useState(null);
 
   const [form, setForm] = useState({
     propertyId: "", tenantId: "", startDate: "", endDate: "", rent: "", increase: "6", period: "anual",
@@ -207,7 +196,8 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
   });
 
   const activos     = [...leases].filter(l => l.status === "activo").sort((a, b) => diffDays(a.endDate) - diffDays(b.endDate));
-  const finalizados = [...leases].filter(l => l.status !== "activo").sort((a, b) => new Date(b.endDate) - new Date(a.endDate));
+  // Finalizados: todos los no-activos EXCEPTO "renovado" (esos se eliminan al renovar)
+  const finalizados = [...leases].filter(l => l.status !== "activo" && l.status !== "renovado").sort((a, b) => new Date(b.endDate) - new Date(a.endDate));
 
   const filterFn = (l) => {
     if (!search) return true;
@@ -239,8 +229,16 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
 
   const openRenew = (l) => {
     setRenewTarget(l);
-    const nextStart = new Date(l.endDate);
-    nextStart.setDate(nextStart.getDate() + 1);
+    // Para contratos vencidos, la nueva fecha de inicio es hoy
+    // Para contratos activos, la nueva fecha de inicio es el día siguiente al fin
+    const isVencido = l.status === "vencido";
+    let nextStart;
+    if (isVencido) {
+      nextStart = new Date();
+    } else {
+      nextStart = new Date(l.endDate);
+      nextStart.setDate(nextStart.getDate() + 1);
+    }
     const ns = nextStart.toISOString().split("T")[0];
     const nextEnd = new Date(nextStart);
     nextEnd.setFullYear(nextEnd.getFullYear() + 1);
@@ -270,27 +268,38 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
     finally { setSaving(false); setEditing(null); }
   };
 
+  // Al renovar: eliminamos el contrato anterior (no lo marcamos como renovado)
+  // y creamos uno nuevo activo. Si el anterior era activo, el backend libera
+  // la propiedad al eliminarlo y la vuelve a marcar al crear el nuevo.
   const confirmRenew = async () => {
     const err = validateRenewForm(renewForm);
     if (err) { setRenewError(err); return; }
     setSaving(true); setRenewError("");
     try {
-      await fetch(`${API}/api/leases/${renewTarget.id}/status`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "renovado" }),
-      });
+      // 1. Eliminar el contrato anterior
+      const delRes = await fetch(`${API}/api/leases/${renewTarget.id}`, { method: "DELETE" });
+      if (!delRes.ok) throw new Error(await delRes.text());
+
+      // 2. Crear el nuevo contrato activo
       const res = await fetch(`${API}/api/leases`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          propertyId: renewTarget.propertyId, tenantId: renewForm.tenantId,
-          startDate: renewForm.startDate, endDate: renewForm.endDate,
-          rent: Number(renewForm.rent), increase: Number(renewForm.increase), period: renewForm.period,
+          propertyId: renewTarget.propertyId,
+          tenantId:   renewForm.tenantId,
+          startDate:  renewForm.startDate,
+          endDate:    renewForm.endDate,
+          rent:       Number(renewForm.rent),
+          increase:   Number(renewForm.increase),
+          period:     renewForm.period,
         }),
       });
       if (!res.ok) throw new Error(await res.text());
       const newLease = await res.json();
-      setLeases(prev => [...prev.map(l => l.id === renewTarget.id ? { ...l, status: "renovado" } : l), newLease]);
-      setRenewModal(false); setRenewTarget(null);
+
+      // 3. Quitar el anterior del estado local y agregar el nuevo
+      setLeases(prev => [...prev.filter(l => l.id !== renewTarget.id), newLease]);
+      setRenewModal(false);
+      setRenewTarget(null);
     } catch (e) { setRenewError("Error al renovar: " + e.message); }
     finally { setSaving(false); }
   };
@@ -314,6 +323,9 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
     ));
     const periodLabel = PERIODS.find(p => p.value === l.period)?.label || "Anual";
     const isCalcOpen  = calcOpen === l.id;
+
+    // Puede renovar si está activo O si está vencido
+    const canRenew = l.status === "activo" || l.status === "vencido";
 
     return (
       <div className={`bg-white dark:bg-gray-800 rounded-2xl border p-5 transition-all hover:shadow-md ${alert ? alert.border : "border-gray-100 dark:border-gray-700"}`}>
@@ -351,9 +363,6 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
                   <button onClick={() => openEdit(l)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" title="Editar">
                     <Edit2 size={13} className="text-gray-400" />
                   </button>
-                  <button onClick={() => openRenew(l)} className="p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors" title="Renovar">
-                    <RefreshCw size={13} className="text-emerald-500" />
-                  </button>
                   <button
                     onClick={() => setCalcOpen(isCalcOpen ? null : l.id)}
                     className={`p-1.5 rounded-lg transition-colors ${isCalcOpen ? "bg-blue-100 dark:bg-blue-900/40" : "hover:bg-blue-50 dark:hover:bg-blue-900/20"}`}
@@ -362,6 +371,11 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
                     <Calculator size={13} className="text-blue-500 dark:text-blue-400" />
                   </button>
                 </>
+              )}
+              {canRenew && (
+                <button onClick={() => openRenew(l)} className="p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors" title="Renovar contrato">
+                  <RefreshCw size={13} className="text-emerald-500" />
+                </button>
               )}
               <button onClick={() => del(l.id)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" title="Eliminar">
                 <Trash2 size={13} className="text-red-400" />
@@ -385,7 +399,6 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
           </div>
         )}
 
-        {/* Calculadora desplegable */}
         {isCalcOpen && (
           <div className="mt-4">
             <RentCalculator lease={l} onClose={() => setCalcOpen(null)} />
@@ -411,7 +424,7 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
         </button>
       </div>
 
-      {/* Tabs estilo Propietarios / Inquilinos */}
+      {/* Tabs */}
       <div className="flex gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl p-1 w-fit">
         {[
           { key: "activo",     label: "Activos",     count: activos.length     },
@@ -542,19 +555,21 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
       <Modal open={renewModal} onClose={() => { setRenewModal(false); setRenewTarget(null); }} title="Renovar Contrato" wide>
         {renewTarget && (
           <div className="space-y-4">
+            {/* Resumen contrato anterior */}
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-xl p-4">
-              <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1">Contrato anterior</p>
+              <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1">Contrato a reemplazar</p>
               <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
                 {properties.find(p => p.id === renewTarget.propertyId)?.address}
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                 {fmtDate(renewTarget.startDate)} → {fmtDate(renewTarget.endDate)} · {fmtCurrency(renewTarget.rent)}/mes ·{" "}
-                Inquilino: {tenants.find(t => t.id === renewTarget.tenantId)?.name}
+                {tenants.find(t => t.id === renewTarget.tenantId)?.name}
+              </p>
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 font-medium">
+                ⚠ Este contrato se eliminará y será reemplazado por el nuevo.
               </p>
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              El contrato anterior pasará a estado <strong>Renovado</strong>. Podés cambiar el inquilino si corresponde.
-            </p>
+
             <Field label="Inquilino para el nuevo contrato">
               <Select value={renewForm.tenantId} onChange={e => { setRenewForm({ ...renewForm, tenantId: e.target.value }); setRenewError(""); }}>
                 <option value="">Seleccionar...</option>
