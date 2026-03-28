@@ -32,7 +32,20 @@ export function mapProperty(row) {
   };
 }
 
+// Parsea el campo indice_ajuste de la BD y devuelve { increase, period }
+// Formato guardado: "10% trimestral" | "5% semestral" | "6% anual"
+function parseIndiceAjuste(indice) {
+  if (!indice) return { increase: 6, period: "anual" };
+  const match = String(indice).match(/^([\d.]+)%?\s*(trimestral|semestral|anual)?/i);
+  if (!match) return { increase: 6, period: "anual" };
+  return {
+    increase: Number(match[1]) || 6,
+    period:   (match[2] || "anual").toLowerCase(),
+  };
+}
+
 export function mapLease(row) {
+  const { increase, period } = parseIndiceAjuste(row.indice_ajuste);
   return {
     id:         String(row.id),
     propertyId: String(row.propiedad_id),
@@ -44,7 +57,8 @@ export function mapLease(row) {
                   ? row.fecha_fin.toISOString().split("T")[0]
                   : String(row.fecha_fin),
     rent:       Number(row.monto_renta),
-    increase:   6,
+    increase,
+    period,
     status:     row.estado_contrato === "activo" ? "activo" : row.estado_contrato,
   };
 }

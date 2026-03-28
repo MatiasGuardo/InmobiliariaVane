@@ -7,9 +7,9 @@ import { fmtCurrency, API } from "../utils/helpers";
 
 const TIPOS = ["Departamento", "Casa", "Local Comercial", "Oficina", "Galpón", "Terreno", "Otro"];
 
-export function Properties({ properties, setProperties, owners }) {
+export function Properties({ properties, setProperties, owners, initialFilter = "todos" }) {
   const [search,  setSearch]  = useState("");
-  const [filter,  setFilter]  = useState("todos");
+  const [filter,  setFilter]  = useState(initialFilter);
   const [modal,   setModal]   = useState(false);
   const [editing, setEditing] = useState(null);
   const [saving,  setSaving]  = useState(false);
