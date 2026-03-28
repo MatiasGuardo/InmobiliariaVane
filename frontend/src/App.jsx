@@ -1,14 +1,14 @@
-import { useMemo, useState, useEffect } from "react";
-import { Sidebar } from "./components/layout/Sidebar";
-import { Dashboard } from "./pages/Dashboard";
-import { Properties } from "./pages/Properties";
-import { Contacts } from "./pages/Contacts";
-import { Leases } from "./pages/Leases";
+import { useMemo, useState } from "react";
+import { Sidebar }       from "./components/layout/Sidebar";
+import { Dashboard }     from "./pages/Dashboard";
+import { Properties }    from "./pages/Properties";
+import { Contacts }      from "./pages/Contacts";
+import { Leases }        from "./pages/Leases";
 import { Notifications } from "./pages/Notifications";
-import { ErrorBox } from "./components/ui/ErrorBox";
-import { useApi } from "./hooks/useApi";
-import { useTheme } from "./hooks/useTheme";
-import { diffDays, getAlertLevel } from "./utils/helpers";
+import { ErrorBox }      from "./components/ui/ErrorBox";
+import { useApi }        from "./hooks/useApi";
+import { useTheme }      from "./hooks/useTheme";
+import { useAlerts }     from "./hooks/useAlerts";
 
 export default function App() {
   const [active, setActive] = useState("dashboard");
@@ -22,36 +22,11 @@ export default function App() {
   const loading = lProps || lOwners || lTenants || lLeases;
   const error   = eProps || eOwners || eTenants || eLeases;
 
-  // ── Badge de alertas ─────────────────────────────────────────
-  const alertCountRaw = useMemo(
-    () => leases.filter(l => l.status === "activo" && getAlertLevel(diffDays(l.endDate))).length,
-    [leases]
-  );
+  // ── Sistema de alertas ────────────────────────────────────
+  const { badgeCount, dismiss, activeAlerts } = useAlerts(leases);
 
-  const [badgeDismissed, setBadgeDismissed] = useState(() => {
-    const lastSeen = localStorage.getItem("alertas_last_seen");
-    if (!lastSeen) return false;
-    return (Date.now() - Number(lastSeen)) < 24 * 60 * 60 * 1000;
-  });
+  const handleSetActive = (id) => setActive(id);
 
-  useEffect(() => {
-    if (alertCountRaw > 0) {
-      const lastSeen = localStorage.getItem("alertas_last_seen");
-      if (!lastSeen || (Date.now() - Number(lastSeen)) >= 24 * 60 * 60 * 1000) {
-        setBadgeDismissed(false);
-      }
-    }
-  }, [alertCountRaw]);
-
-  const handleSetActive = (id) => {
-    setActive(id);
-    if (id === "notifications") {
-      setBadgeDismissed(true);
-      localStorage.setItem("alertas_last_seen", String(Date.now()));
-    }
-  };
-
-  const alertCount = badgeDismissed ? 0 : alertCountRaw;
   const shared = { properties, setProperties, owners, setOwners, tenants, setTenants, leases, setLeases };
 
   // ── Loading ──────────────────────────────────────────────────
@@ -92,17 +67,17 @@ export default function App() {
       <Sidebar
         active={active}
         setActive={handleSetActive}
-        alertCount={alertCount}
+        alertCount={badgeCount}
         dark={dark}
         toggleDark={toggleDark}
       />
       <main className="flex-1 overflow-auto">
         <div className="max-w-5xl mx-auto px-6 py-8">
-          {active === "dashboard"     && <Dashboard     {...shared} />}
+          {active === "dashboard"     && <Dashboard     {...shared} setActive={handleSetActive} activeAlerts={activeAlerts} />}
           {active === "properties"    && <Properties    {...shared} />}
           {active === "contacts"      && <Contacts      {...shared} />}
           {active === "leases"        && <Leases        {...shared} />}
-          {active === "notifications" && <Notifications {...shared} />}
+          {active === "notifications" && <Notifications {...shared} activeAlerts={activeAlerts} dismiss={dismiss} />}
         </div>
       </main>
     </div>
