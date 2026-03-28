@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { pool } from "../db.js";
+import { pool }    from "../db.js";
 import { mapLease } from "../mappers.js";
 
 const router = Router();
@@ -43,11 +43,15 @@ router.post("/", async (req, res) => {
        increase ? `${increase}% anual` : null]
     );
 
-    await conn.query("UPDATE propiedades SET estado = 'alquilada' WHERE id = ?", [propertyId]);
+    // Marcar propiedad como alquilada
+    await conn.query(
+      "UPDATE propiedades SET estado = 'alquilada' WHERE id = ?", [propertyId]
+    );
+
     await conn.commit();
 
     res.status(201).json({
-      id: String(result.insertId),
+      id:         String(result.insertId),
       propertyId: String(propertyId),
       tenantId:   String(tenantId),
       startDate, endDate,
@@ -118,6 +122,7 @@ router.delete("/:id", async (req, res) => {
 
     await conn.query("DELETE FROM contratos WHERE id = ?", [req.params.id]);
 
+    // Solo liberar la propiedad si no queda otro contrato activo
     const [[otro]] = await conn.query(
       "SELECT id FROM contratos WHERE propiedad_id = ? AND estado_contrato = 'activo' LIMIT 1",
       [lease.propiedad_id]
@@ -145,14 +150,37 @@ router.patch("/:id/status", async (req, res) => {
   const valid = ["activo", "vencido", "rescindido", "renovado"];
   if (!valid.includes(status))
     return res.status(400).json({ error: "Estado inválido" });
+  const conn = await pool.getConnection();
   try {
-    await pool.query(
+    await conn.beginTransaction();
+    await conn.query(
       "UPDATE contratos SET estado_contrato = ? WHERE id = ?", [status, req.params.id]
     );
+    // Si pasa a no-activo, verificar si liberar la propiedad
+    if (status !== "activo") {
+      const [[lease]] = await conn.query(
+        "SELECT propiedad_id FROM contratos WHERE id = ?", [req.params.id]
+      );
+      if (lease) {
+        const [[otro]] = await conn.query(
+          "SELECT id FROM contratos WHERE propiedad_id = ? AND estado_contrato = 'activo' LIMIT 1",
+          [lease.propiedad_id]
+        );
+        if (!otro) {
+          await conn.query(
+            "UPDATE propiedades SET estado = 'disponible' WHERE id = ?", [lease.propiedad_id]
+          );
+        }
+      }
+    }
+    await conn.commit();
     res.json({ ok: true });
   } catch (err) {
+    await conn.rollback();
     console.error(err);
     res.status(500).json({ error: "Error al actualizar estado del contrato" });
+  } finally {
+    conn.release();
   }
 });
 
