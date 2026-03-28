@@ -1,46 +1,30 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Building2, Users, FileText, Bell, LayoutDashboard,
   Plus, Search, X, AlertTriangle,
   CheckCircle, Calendar, DollarSign, Phone, Mail,
   Edit2, Trash2, ArrowUpRight, ArrowDownRight, Percent, Key,
-  User,
+  User, RefreshCw,
 } from "lucide-react";
 
-// ─── CONFIG ─────────────────────────────────────────────────────────────────
-
+// ─── CONFIG ──────────────────────────────────────────────────────────────────
 const API = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
-// ─── HELPERS ────────────────────────────────────────────────────────────────
-
-const today = new Date(); // Solo para mostrar la fecha en Dashboard
-const fmtDate = d => new Date(d).toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" });
-
-// Punto 4: usa new Date() fresco cada vez para que los días sean correctos
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+const fmtDate  = d => new Date(d).toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" });
 const diffDays = d => Math.ceil((new Date(d) - new Date()) / 86400000);
 
 const getAlertLevel = (days) => {
-  if (days <= 15)  return { label: "Crítico",  color: "text-red-600",    bg: "bg-red-50",    dot: "bg-red-500",    border: "border-red-200" };
-  if (days <= 30)  return { label: "Urgente",  color: "text-orange-600", bg: "bg-orange-50", dot: "bg-orange-500", border: "border-orange-200" };
-  if (days <= 90)  return { label: "Próximo",  color: "text-amber-600",  bg: "bg-amber-50",  dot: "bg-amber-400",  border: "border-amber-200" };
+  if (days <= 15) return { label: "Crítico",  color: "text-red-600",    bg: "bg-red-50",    dot: "bg-red-500",    border: "border-red-200" };
+  if (days <= 30) return { label: "Urgente",  color: "text-orange-600", bg: "bg-orange-50", dot: "bg-orange-500", border: "border-orange-200" };
+  if (days <= 90) return { label: "Próximo",  color: "text-amber-600",  bg: "bg-amber-50",  dot: "bg-amber-400",  border: "border-amber-200" };
   return null;
 };
 
 const fmtCurrency = (n) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(n);
 
-// Punto 3: muestra meses si > 90 días, días si ≤ 90 días, "Venció" si ya pasó
-const fmtDuration = (days) => {
-  if (days <= 0) return "Venció";
-  if (days > 90) {
-    const months = Math.floor(days / 30);
-    return `${months} ${months === 1 ? "mes" : "meses"}`;
-  }
-  return `${days} días`;
-};
-
-// ─── HOOK: llamada genérica a la API ────────────────────────────────────────
-
+// ─── HOOK useApi ─────────────────────────────────────────────────────────────
 function useApi(endpoint) {
   const [data,    setData]    = useState([]);
   const [loading, setLoading] = useState(true);
@@ -61,12 +45,10 @@ function useApi(endpoint) {
   };
 
   useEffect(() => { load(); }, [endpoint]);
-
   return { data, setData, loading, error, reload: load };
 }
 
-// ─── MODAL ──────────────────────────────────────────────────────────────────
-
+// ─── MODAL ───────────────────────────────────────────────────────────────────
 function Modal({ open, onClose, title, children, wide = false }) {
   if (!open) return null;
   return (
@@ -88,8 +70,7 @@ function Modal({ open, onClose, title, children, wide = false }) {
   );
 }
 
-// ─── FORM FIELD ─────────────────────────────────────────────────────────────
-
+// ─── FORM HELPERS ────────────────────────────────────────────────────────────
 function Field({ label, children, hint }) {
   return (
     <div className="space-y-1.5">
@@ -121,7 +102,6 @@ function Select({ children, ...props }) {
 }
 
 // ─── LOADING / ERROR ─────────────────────────────────────────────────────────
-
 function ErrorBox({ message, onRetry }) {
   return (
     <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
@@ -138,13 +118,12 @@ function ErrorBox({ message, onRetry }) {
 }
 
 // ─── STAT CARD ───────────────────────────────────────────────────────────────
-
 function StatCard({ icon: Icon, label, value, sub, color = "blue", trend }) {
   const colors = {
-    blue:   { bg: "bg-blue-50",    icon: "text-blue-600",    val: "text-blue-700" },
-    green:  { bg: "bg-emerald-50", icon: "text-emerald-600", val: "text-emerald-700" },
-    orange: { bg: "bg-orange-50",  icon: "text-orange-600",  val: "text-orange-700" },
-    slate:  { bg: "bg-slate-50",   icon: "text-slate-600",   val: "text-slate-700" },
+    blue:   { bg: "bg-blue-50",    icon: "text-blue-600" },
+    green:  { bg: "bg-emerald-50", icon: "text-emerald-600" },
+    orange: { bg: "bg-orange-50",  icon: "text-orange-600" },
+    slate:  { bg: "bg-slate-50",   icon: "text-slate-600" },
   };
   const c = colors[color];
   return (
@@ -170,14 +149,15 @@ function StatCard({ icon: Icon, label, value, sub, color = "blue", trend }) {
 }
 
 // ─── BADGE ───────────────────────────────────────────────────────────────────
-
 function Badge({ status }) {
   const map = {
-    ocupado:   "bg-emerald-100 text-emerald-700",
-    vacante:   "bg-gray-100 text-gray-600",
-    activo:    "bg-blue-100 text-blue-700",
-    vencido:   "bg-red-100 text-red-700",
-    pendiente: "bg-amber-100 text-amber-700",
+    ocupado:    "bg-emerald-100 text-emerald-700",
+    vacante:    "bg-gray-100 text-gray-600",
+    activo:     "bg-blue-100 text-blue-700",
+    vencido:    "bg-red-100 text-red-700",
+    rescindido: "bg-orange-100 text-orange-700",
+    renovado:   "bg-purple-100 text-purple-700",
+    pendiente:  "bg-amber-100 text-amber-700",
   };
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${map[status] || "bg-gray-100 text-gray-600"}`}>
@@ -187,8 +167,7 @@ function Badge({ status }) {
 }
 
 // ─── DASHBOARD ───────────────────────────────────────────────────────────────
-
-function Dashboard({ properties, leases, tenants, owners }) {
+function Dashboard({ properties, leases, tenants, dark, setDark }) {
   const occupied  = properties.filter(p => p.status === "ocupado").length;
   const vacant    = properties.filter(p => p.status === "vacante").length;
   const totalRent = leases.filter(l => l.status === "activo").reduce((s, l) => s + l.rent, 0);
@@ -204,30 +183,41 @@ function Dashboard({ properties, leases, tenants, owners }) {
     .filter(Boolean)
     .sort((a, b) => a.days - b.days);
 
-  const recentLeases = [...leases].sort((a, b) => new Date(b.startDate) - new Date(a.startDate)).slice(0, 4);
+
+  const recentLeases = [...leases]
+    .filter(l => l.status === "activo")
+    .sort((a, b) => new Date(b.startDate) - new Date(a.startDate))
+    .slice(0, 4);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          {today.toLocaleDateString("es-AR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Dashboard</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            {new Date().toLocaleDateString("es-AR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+          </p>
+        </div>
+        <button
+          onClick={() => setDark(d => !d)}
+          className="px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-200 shadow hover:bg-gray-50 dark:hover:bg-gray-700 transition-all"
+        >
+          {dark ? '☀️ Modo Claro' : '🌙 Modo Oscuro'}
+        </button>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard icon={Building2}   label="Propiedades Totales"  value={properties.length} color="blue"   trend={8} />
-        <StatCard icon={CheckCircle} label="Propiedades Ocupadas" value={occupied} sub={properties.length ? `${Math.round(occupied/properties.length*100)}% ocupación` : ""} color="green" />
+        <StatCard icon={CheckCircle} label="Propiedades Ocupadas" value={occupied} sub={properties.length ? `${Math.round(occupied / properties.length * 100)}% ocupación` : ""} color="green" />
         <StatCard icon={Key}         label="Vacantes"             value={vacant}   color="orange" />
         <StatCard icon={DollarSign}  label="Renta Mensual Total"  value={fmtCurrency(totalRent)} color="slate" trend={6} />
       </div>
 
-      {/* Barra de ocupación */}
       {properties.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-100 p-5">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-gray-800">Tasa de Ocupación</h3>
-            <span className="text-2xl font-bold text-gray-900">{Math.round(occupied/properties.length*100)}%</span>
+            <span className="text-2xl font-bold text-gray-900">{Math.round(occupied / properties.length * 100)}%</span>
           </div>
           <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
             <div
@@ -242,7 +232,6 @@ function Dashboard({ properties, leases, tenants, owners }) {
         </div>
       )}
 
-      {/* Alertas */}
       {alerts.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-100 p-5">
           <div className="flex items-center gap-2 mb-4">
@@ -260,11 +249,8 @@ function Dashboard({ properties, leases, tenants, owners }) {
                   <p className="text-sm font-medium text-gray-800 truncate">{a.prop?.address}</p>
                   <p className="text-xs text-gray-500">{a.tenant?.name}</p>
                 </div>
-                {/* Punto 7: cambiar "d" por "días" y "Venc" por "Venció" */}
                 <div className="text-right flex-shrink-0">
-                  <p className={`text-sm font-bold ${a.level.color}`}>
-                    {a.days <= 0 ? "Venció" : fmtDuration(a.days)}
-                  </p>
+                  <p className={`text-sm font-bold ${a.level.color}`}>{a.days === 0 ? "Hoy" : `${a.days}d`}</p>
                   <p className={`text-xs ${a.level.color}`}>{a.level.label}</p>
                 </div>
               </div>
@@ -273,44 +259,45 @@ function Dashboard({ properties, leases, tenants, owners }) {
         </div>
       )}
 
-      {/* Contratos recientes */}
       <div className="bg-white rounded-2xl border border-gray-100 p-5">
         <h3 className="font-semibold text-gray-800 mb-4">Contratos Activos Recientes</h3>
-        <div className="space-y-2">
-          {recentLeases.map(l => {
-            const prop   = properties.find(p => p.id === l.propertyId);
-            const tenant = tenants.find(t => t.id === l.tenantId);
-            const days   = diffDays(l.endDate);
-            const alert  = getAlertLevel(days);
-            return (
-              <div key={l.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors">
-                <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
-                  <FileText size={14} className="text-blue-600" />
+        {recentLeases.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-6">Sin contratos activos</p>
+        ) : (
+          <div className="space-y-2">
+            {recentLeases.map(l => {
+              const prop   = properties.find(p => p.id === l.propertyId);
+              const tenant = tenants.find(t => t.id === l.tenantId);
+              const days   = diffDays(l.endDate);
+              const alert  = getAlertLevel(days);
+              return (
+                <div key={l.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                    <FileText size={14} className="text-blue-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate">{prop?.address}</p>
+                    <p className="text-xs text-gray-400">{tenant?.name}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-gray-700">{fmtCurrency(l.rent)}</p>
+                    {alert
+                      ? <p className={`text-xs ${alert.color}`}>{days}d restantes</p>
+                      : <p className="text-xs text-gray-400">Vence {fmtDate(l.endDate)}</p>
+                    }
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-800 truncate">{prop?.address}</p>
-                  <p className="text-xs text-gray-400">{tenant?.name}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium text-gray-700">{fmtCurrency(l.rent)}</p>
-                  {/* Punto 7: usa fmtDuration en vez de "d" */}
-                  {alert
-                    ? <p className={`text-xs ${alert.color}`}>{days <= 0 ? "Venció" : `${fmtDuration(days)} restantes`}</p>
-                    : <p className="text-xs text-gray-400">Vence {fmtDate(l.endDate)}</p>
-                  }
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// ─── PROPERTIES ───────────────────────────────────────────────────────────────
-
-function Properties({ properties, setProperties, owners, leases }) {
+// ─── PROPERTIES ──────────────────────────────────────────────────────────────
+function Properties({ properties, setProperties, owners }) {
   const [search,  setSearch]  = useState("");
   const [filter,  setFilter]  = useState("todos");
   const [modal,   setModal]   = useState(false);
@@ -340,9 +327,7 @@ function Properties({ properties, setProperties, owners, leases }) {
       });
       if (!res.ok) throw new Error(await res.text());
       const saved = await res.json();
-      setProperties(prev =>
-        editing ? prev.map(p => p.id === editing ? saved : p) : [...prev, saved]
-      );
+      setProperties(prev => editing ? prev.map(p => p.id === editing ? saved : p) : [...prev, saved]);
       setModal(false);
     } catch (e) {
       alert("Error al guardar: " + e.message);
@@ -381,7 +366,7 @@ function Properties({ properties, setProperties, owners, leases }) {
           />
         </div>
         <div className="flex gap-1 bg-white border border-gray-200 rounded-xl p-1">
-          {["todos","ocupado","vacante"].map(f => (
+          {["todos", "ocupado", "vacante"].map(f => (
             <button key={f} onClick={() => setFilter(f)}
               className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all capitalize ${filter === f ? "bg-blue-600 text-white" : "text-gray-500 hover:text-gray-700"}`}>
               {f}
@@ -440,18 +425,18 @@ function Properties({ properties, setProperties, owners, leases }) {
       <Modal open={modal} onClose={() => setModal(false)} title={editing ? "Editar Propiedad" : "Nueva Propiedad"} wide>
         <div className="space-y-4">
           <Field label="Dirección completa">
-            <Input placeholder="Av. Santa Fe 2450, Piso 3B" value={form.address} onChange={e => setForm({...form, address: e.target.value})} />
+            <Input placeholder="Av. Santa Fe 2450, Piso 3B" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} />
           </Field>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Tipo">
-              <Select value={form.type} onChange={e => setForm({...form, type: e.target.value})}>
-                {["Departamento","Casa","Local Comercial","Oficina","Galpón","Terreno","Otro"].map(t => (
+              <Select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
+                {["Departamento", "Casa", "Local Comercial", "Oficina", "Galpón", "Terreno", "Otro"].map(t => (
                   <option key={t}>{t}</option>
                 ))}
               </Select>
             </Field>
             <Field label="Estado">
-              <Select value={form.status} onChange={e => setForm({...form, status: e.target.value})}>
+              <Select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
                 <option value="vacante">Vacante</option>
                 <option value="ocupado">Ocupado</option>
               </Select>
@@ -459,10 +444,10 @@ function Properties({ properties, setProperties, owners, leases }) {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Precio lista (ARS)">
-              <Input type="number" placeholder="Ej: 320000" value={form.price} onChange={e => setForm({...form, price: e.target.value})} />
+              <Input type="number" placeholder="Ej: 320000" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} />
             </Field>
             <Field label="Propietario">
-              <Select value={form.ownerId} onChange={e => setForm({...form, ownerId: e.target.value})}>
+              <Select value={form.ownerId} onChange={e => setForm({ ...form, ownerId: e.target.value })}>
                 <option value="">Seleccionar...</option>
                 {owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
               </Select>
@@ -482,40 +467,56 @@ function Properties({ properties, setProperties, owners, leases }) {
   );
 }
 
-// ─── CONTACTS ─────────────────────────────────────────────────────────────────
-
+// ─── CONTACTS ────────────────────────────────────────────────────────────────
 function Contacts({ owners, setOwners, tenants, setTenants, properties, leases }) {
-  const [tab,    setTab]    = useState("owners");
-  const [modal,  setModal]  = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [tab,     setTab]     = useState("owners");
+  const [modal,   setModal]   = useState(false);
+  const [saving,  setSaving]  = useState(false);
+  const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: "", email: "", phone: "", role: "owner" });
+
+  const openNew = () => {
+    setEditing(null);
+    setForm({ name: "", email: "", phone: "", role: tab === "owners" ? "owner" : "tenant" });
+    setModal(true);
+  };
+
+  const openEdit = (person) => {
+    setEditing(person.id);
+    setForm({ name: person.name, email: person.email, phone: person.phone || "", role: tab === "owners" ? "owner" : "tenant" });
+    setModal(true);
+  };
 
   const save = async () => {
     if (!form.name || !form.email) return;
     setSaving(true);
     const endpoint = form.role === "owner" ? "/api/owners" : "/api/tenants";
+    const method   = editing ? "PUT" : "POST";
+    const url      = editing ? `${API}${endpoint}/${editing}` : `${API}${endpoint}`;
     try {
-      const res = await fetch(`${API}${endpoint}`, {
-        method:  "POST",
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: form.name, email: form.email, phone: form.phone }),
       });
       if (!res.ok) throw new Error(await res.text());
       const saved = await res.json();
-      if (form.role === "owner") setOwners(prev => [...prev, saved]);
-      else                       setTenants(prev => [...prev, saved]);
+      if (form.role === "owner") {
+        setOwners(prev => editing ? prev.map(o => o.id === editing ? saved : o) : [...prev, saved]);
+      } else {
+        setTenants(prev => editing ? prev.map(t => t.id === editing ? saved : t) : [...prev, saved]);
+      }
       setModal(false);
     } catch (e) {
       alert("Error al guardar: " + e.message);
     } finally {
       setSaving(false);
+      setEditing(null);
     }
   };
 
-  const list = tab === "owners" ? owners : tenants;
-
   const del = async (id) => {
-    if (!confirm("¿Eliminar este contacto? Esta acción no se puede deshacer.")) return;
+    if (!confirm("¿Eliminar este contacto?")) return;
     const endpoint = tab === "owners" ? `/api/owners/${id}` : `/api/tenants/${id}`;
     try {
       const res = await fetch(`${API}${endpoint}`, { method: "DELETE" });
@@ -527,6 +528,8 @@ function Contacts({ owners, setOwners, tenants, setTenants, properties, leases }
     }
   };
 
+  const list = tab === "owners" ? owners : tenants;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -534,7 +537,7 @@ function Contacts({ owners, setOwners, tenants, setTenants, properties, leases }
           <h1 className="text-2xl font-bold text-gray-900">Contactos</h1>
           <p className="text-sm text-gray-500 mt-1">{owners.length} propietarios · {tenants.length} inquilinos</p>
         </div>
-        <button onClick={() => { setForm({ name: "", email: "", phone: "", role: tab === "owners" ? "owner" : "tenant" }); setModal(true); }}
+        <button onClick={openNew}
           className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200">
           <Plus size={16} /> Nuevo Contacto
         </button>
@@ -568,9 +571,14 @@ function Contacts({ owners, setOwners, tenants, setTenants, properties, leases }
                     <p className="text-xs text-emerald-600 mt-1.5">Contrato activo · Vence {fmtDate(lease.endDate)}</p>
                   )}
                 </div>
-                <button onClick={() => del(person.id)} className="p-1.5 rounded-lg hover:bg-red-50 transition-colors flex-shrink-0">
-                  <Trash2 size={14} className="text-red-400" />
-                </button>
+                <div className="flex flex-col gap-1 flex-shrink-0">
+                  <button onClick={() => openEdit(person)} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+                    <Edit2 size={13} className="text-gray-400" />
+                  </button>
+                  <button onClick={() => del(person.id)} className="p-1.5 rounded-lg hover:bg-red-50 transition-colors">
+                    <Trash2 size={14} className="text-red-400" />
+                  </button>
+                </div>
               </div>
             </div>
           );
@@ -584,29 +592,29 @@ function Contacts({ owners, setOwners, tenants, setTenants, properties, leases }
         )}
       </div>
 
-      <Modal open={modal} onClose={() => setModal(false)} title="Nuevo Contacto">
+      <Modal open={modal} onClose={() => { setModal(false); setEditing(null); }} title={editing ? "Editar Contacto" : "Nuevo Contacto"}>
         <div className="space-y-4">
           <Field label="Rol">
-            <Select value={form.role} onChange={e => setForm({...form, role: e.target.value})}>
+            <Select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} disabled={!!editing}>
               <option value="owner">Propietario</option>
               <option value="tenant">Inquilino</option>
             </Select>
           </Field>
           <Field label="Nombre completo">
-            <Input placeholder="Ej: Juan Pérez" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
+            <Input placeholder="Ej: Juan Pérez" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
           </Field>
           <Field label="Email">
-            <Input type="email" placeholder="juan@email.com" value={form.email} onChange={e => setForm({...form, email: e.target.value})} />
+            <Input type="email" placeholder="juan@email.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
           </Field>
           <Field label="Teléfono" hint="Opcional">
-            <Input placeholder="+54 11 1234-5678" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} />
+            <Input placeholder="+54 11 1234-5678" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
           </Field>
           <div className="flex gap-3 pt-2">
-            <button onClick={() => setModal(false)} className="flex-1 px-4 py-2.5 border border-gray-200 text-sm font-medium text-gray-600 rounded-xl hover:bg-gray-50 transition-colors">
+            <button onClick={() => { setModal(false); setEditing(null); }} className="flex-1 px-4 py-2.5 border border-gray-200 text-sm font-medium text-gray-600 rounded-xl hover:bg-gray-50 transition-colors">
               Cancelar
             </button>
             <button onClick={save} disabled={saving} className="flex-1 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors">
-              {saving ? "Guardando…" : "Crear Contacto"}
+              {saving ? "Guardando…" : (editing ? "Actualizar" : "Crear Contacto")}
             </button>
           </div>
         </div>
@@ -615,240 +623,354 @@ function Contacts({ owners, setOwners, tenants, setTenants, properties, leases }
   );
 }
 
-// ─── LEASES ───────────────────────────────────────────────────────────────────
-
+// ─── LEASES ──────────────────────────────────────────────────────────────────
 function Leases({ leases, setLeases, properties, tenants }) {
-  const [modal,     setModal]     = useState(false);
-  const [saving,    setSaving]    = useState(false);
-  const [editing,   setEditing]   = useState(null); // Punto 1: estado de edición
-  const [formError, setFormError] = useState("");   // Punto 5: mensaje de error
+  const [modal,       setModal]       = useState(false);
+  const [renewModal,  setRenewModal]  = useState(false);
+  const [saving,      setSaving]      = useState(false);
+  const [editing,     setEditing]     = useState(null);
+  const [renewTarget, setRenewTarget] = useState(null);
+  const [form, setForm] = useState({ propertyId: "", tenantId: "", startDate: "", endDate: "", rent: "", increase: "6" });
+  const [renewForm, setRenewForm] = useState({ startDate: "", endDate: "", rent: "", increase: "6" });
 
-  const [form, setForm] = useState({
-    propertyId: "", tenantId: "", startDate: "", endDate: "", rent: "", increase: "6",
-  });
 
-  // Punto 1: abrir modal en modo "Nuevo"
+  // Separar y ordenar
+  const activos = [...leases]
+    .filter(l => l.status === "activo")
+    .sort((a, b) => diffDays(a.endDate) - diffDays(b.endDate)); // más próximos a vencer primero
+
+  const finalizados = [...leases]
+    .filter(l => l.status !== "activo")
+    .sort((a, b) => new Date(b.endDate) - new Date(a.endDate)); // más recientes primero
+
+  // Tabs para activos/finalizados
+  const [tab, setTab] = useState("activos");
+
   const openNew = () => {
     setEditing(null);
     setForm({ propertyId: "", tenantId: "", startDate: "", endDate: "", rent: "", increase: "6" });
-    setFormError("");
     setModal(true);
   };
 
-  // Punto 1 y 8: abrir modal en modo "Editar" (permite cambiar inquilino)
   const openEdit = (l) => {
     setEditing(l.id);
-    setForm({
-      propertyId: l.propertyId,
-      tenantId:   l.tenantId,
-      startDate:  l.startDate,
-      endDate:    l.endDate,
-      rent:       String(l.rent),
-      increase:   String(l.increase),
-    });
-    setFormError("");
+    setForm({ propertyId: l.propertyId, tenantId: l.tenantId, startDate: l.startDate, endDate: l.endDate, rent: String(l.rent), increase: String(l.increase) });
     setModal(true);
   };
 
-  const del = async (id) => {
-    if (!confirm("¿Eliminar este contrato? Esta acción no se puede deshacer.")) return;
-    try {
-      const res = await fetch(`${API}/api/leases/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(await res.text());
-      setLeases(prev => prev.filter(l => l.id !== id));
-    } catch (e) {
-      alert("Error al eliminar: " + e.message);
-    }
+  const openRenew = (l) => {
+    setRenewTarget(l);
+    const nextStart = new Date(l.endDate);
+    nextStart.setDate(nextStart.getDate() + 1);
+    const nextStartStr = nextStart.toISOString().split("T")[0];
+    const nextEnd = new Date(nextStart);
+    nextEnd.setFullYear(nextEnd.getFullYear() + 1);
+    const nextEndStr = nextEnd.toISOString().split("T")[0];
+    const newRent = Math.round(l.rent * (1 + (l.increase || 6) / 100));
+    setRenewForm({ startDate: nextStartStr, endDate: nextEndStr, rent: String(newRent), increase: String(l.increase || 6) });
+    setRenewModal(true);
   };
 
   const save = async () => {
-    if (!form.propertyId || !form.tenantId || !form.startDate || !form.endDate || !form.rent) return;
-
-    // Punto 5: validar que la fecha de fin no sea anterior a hoy (solo al crear)
-    if (!editing) {
-      const todayStr = new Date().toISOString().split("T")[0];
-      if (form.endDate < todayStr) {
-        setFormError("La fecha de finalización no puede ser anterior a hoy. Por favor corregí la fecha.");
-        return;
-      }
+    // Validar fechas inválidas (ej: 30/02/2025) para inicio y fin antes de chequear campos vacíos
+    const start = new Date(form.startDate);
+    const end = new Date(form.endDate);
+    const validStart = form.startDate && !isNaN(start.getTime()) && form.startDate === start.toISOString().split('T')[0];
+    const validEnd = form.endDate && !isNaN(end.getTime()) && form.endDate === end.toISOString().split('T')[0];
+    if ((form.startDate && !validStart) || (form.endDate && !validEnd)) {
+      alert("Fecha incorrecta");
+      return;
     }
-
+    if (!form.propertyId || !form.tenantId || !form.startDate || !form.endDate || !form.rent) {
+      alert("Completa todos los campos obligatorios");
+      return;
+    }
+    // Validar que la fecha de fin no sea anterior a hoy
+    if (end < new Date(new Date().toISOString().split('T')[0])) {
+      alert("Fecha invalida");
+      return;
+    }
     setSaving(true);
-    setFormError("");
     try {
       const method = editing ? "PUT" : "POST";
       const url    = editing ? `${API}/api/leases/${editing}` : `${API}/api/leases`;
-      const res    = await fetch(url, {
+      const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, rent: Number(form.rent), increase: Number(form.increase) }),
       });
       if (!res.ok) throw new Error(await res.text());
       const saved = await res.json();
-      setLeases(prev =>
-        editing ? prev.map(l => l.id === editing ? saved : l) : [...prev, saved]
-      );
+      setLeases(prev => editing ? prev.map(l => l.id === editing ? saved : l) : [...prev, saved]);
       setModal(false);
     } catch (e) {
       alert("Error al guardar: " + e.message);
     } finally {
       setSaving(false);
+      setEditing(null);
     }
   };
 
-  // Punto 6: ordenar por días restantes (más urgente primero)
-  const sortedLeases = [...leases].sort((a, b) => diffDays(a.endDate) - diffDays(b.endDate));
+  const confirmRenew = async () => {
+    if (!renewForm.startDate || !renewForm.endDate || !renewForm.rent) return;
+    setSaving(true);
+    try {
+      // Marcar contrato anterior como renovado
+      await fetch(`${API}/api/leases/${renewTarget.id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "renovado" }),
+      });
+      // Crear nuevo contrato
+      const res = await fetch(`${API}/api/leases`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          propertyId: renewTarget.propertyId,
+          tenantId:   renewTarget.tenantId,
+          startDate:  renewForm.startDate,
+          endDate:    renewForm.endDate,
+          rent:       Number(renewForm.rent),
+          increase:   Number(renewForm.increase),
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const newLease = await res.json();
+      setLeases(prev => [
+        ...prev.map(l => l.id === renewTarget.id ? { ...l, status: "renovado" } : l),
+        newLease,
+      ]);
+      setRenewModal(false);
+      setRenewTarget(null);
+    } catch (e) {
+      alert("Error al renovar: " + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const del = async (id) => {
+    if (!confirm("¿Eliminar este contrato?")) return;
+    try {
+      await fetch(`${API}/api/leases/${id}`, { method: "DELETE" });
+      setLeases(prev => prev.filter(l => l.id !== id));
+    } catch (e) {
+      alert("Error al eliminar: " + e.message);
+    }
+  };
+
+  // Card reutilizable
+  const LeaseCard = ({ l }) => {
+    const prop   = properties.find(p => p.id === l.propertyId);
+    const tenant = tenants.find(t => t.id === l.tenantId);
+    const days   = diffDays(l.endDate);
+    const alert  = l.status === "activo" ? getAlertLevel(days) : null;
+    const progress = Math.min(100, Math.max(0,
+      ((new Date() - new Date(l.startDate)) / (new Date(l.endDate) - new Date(l.startDate))) * 100
+    ));
+
+    return (
+      <div className={`bg-white rounded-2xl border p-5 transition-all hover:shadow-md ${alert ? alert.border : l.status === "activo" ? "border-emerald-200" : "border-gray-100"}`}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-4 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+              <FileText size={16} className="text-blue-600" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold text-gray-800 truncate">{prop?.address}</p>
+              <p className="text-sm text-gray-500 mt-0.5">{tenant?.name}</p>
+              <div className="flex items-center gap-4 mt-2">
+                <span className="text-xs text-gray-400 flex items-center gap-1">
+                  <Calendar size={11} />{fmtDate(l.startDate)} → {fmtDate(l.endDate)}
+                </span>
+                <span className="text-xs text-gray-400 flex items-center gap-1">
+                  <Percent size={11} />+{l.increase}% anual
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2 flex-shrink-0">
+            <div className="text-right">
+              <p className="font-bold text-gray-900">{fmtCurrency(l.rent)}</p>
+              <p className="text-xs text-gray-400 mt-0.5">por mes</p>
+              {alert
+                ? <p className={`text-xs font-semibold mt-1 ${alert.color}`}>{days <= 0 ? "Vencido" : `${days} días`}</p>
+                : null
+              }
+            </div>
+            <div className="flex flex-col gap-1">
+              {(l.status === "activo" || l.status === "finalizado" || l.status === "vencido" || l.status === "rescindido") && (
+                <>
+                  <button onClick={() => openEdit(l)} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors" title="Editar">
+                    <Edit2 size={13} className="text-gray-400" />
+                  </button>
+                  <button onClick={() => openRenew(l)} className="p-1.5 rounded-lg hover:bg-emerald-50 transition-colors" title="Renovar">
+                    <RefreshCw size={13} className="text-emerald-500" />
+                  </button>
+                </>
+              )}
+              <button onClick={() => del(l.id)} className="p-1.5 rounded-lg hover:bg-red-50 transition-colors" title="Eliminar">
+                <Trash2 size={13} className="text-red-400" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {l.status === "activo" && (
+          <div className="mt-4">
+            <div className="flex justify-between text-xs text-gray-400 mb-1.5">
+              <span>Progreso del contrato</span>
+              <span>{Math.round(progress)}%</span>
+            </div>
+            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-700 ${alert ? (days <= 15 ? "bg-red-500" : days <= 30 ? "bg-orange-400" : "bg-amber-400") : "bg-blue-500"}`}
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Contratos</h1>
-          <p className="text-sm text-gray-500 mt-1">{leases.filter(l => l.status === "activo").length} contratos activos</p>
+          <p className="text-sm text-gray-500 mt-1">{activos.length} activos · {finalizados.length} finalizados</p>
         </div>
-        <button onClick={openNew} className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200">
+        <button onClick={openNew}
+          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200">
           <Plus size={16} /> Nuevo Contrato
         </button>
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-1 bg-white border border-gray-200 rounded-xl p-1 w-fit">
+        <button onClick={() => setTab("activos")}  className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-all ${tab === "activos"  ? "bg-blue-600 text-white" : "text-gray-500 hover:text-gray-700"}`}>Activos</button>
+        <button onClick={() => setTab("finalizados")} className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-all ${tab === "finalizados" ? "bg-blue-600 text-white" : "text-gray-500 hover:text-gray-700"}`}>Finalizados</button>
+      </div>
+
+      {/* Lista según tab */}
       <div className="space-y-3">
-        {sortedLeases.map(l => {
-          const prop   = properties.find(p => p.id === l.propertyId);
-          const tenant = tenants.find(t => t.id === l.tenantId);
-          const days   = diffDays(l.endDate);
-          const alert  = getAlertLevel(days);
-          const progress = Math.min(100, Math.max(0,
-            ((new Date() - new Date(l.startDate)) / (new Date(l.endDate) - new Date(l.startDate))) * 100
-          ));
-          return (
-            <div key={l.id} className={`bg-white rounded-2xl border p-5 transition-all hover:shadow-md ${alert ? alert.border : "border-gray-100"}`}>
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-4 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
-                    <FileText size={16} className="text-blue-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-semibold text-gray-800 truncate">{prop?.address}</p>
-                    <p className="text-sm text-gray-500 mt-0.5">{tenant?.name}</p>
-                    <div className="flex items-center gap-4 mt-2">
-                      <span className="text-xs text-gray-400 flex items-center gap-1">
-                        <Calendar size={11} />{fmtDate(l.startDate)} → {fmtDate(l.endDate)}
-                      </span>
-                      <span className="text-xs text-gray-400 flex items-center gap-1">
-                        <Percent size={11} />+{l.increase}% anual
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2 flex-shrink-0">
-                  <div className="text-right">
-                    <p className="font-bold text-gray-900">{fmtCurrency(l.rent)}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">por mes</p>
-                    {alert
-                      ? <p className={`text-xs font-semibold mt-1 ${alert.color}`}>
-                          {days <= 0 ? "Venció" : `${fmtDuration(days)} restantes`}
-                        </p>
-                      : <Badge status={l.status} />
-                    }
-                  </div>
-                  {/* Punto 1: botón de editar contrato */}
-                  <div className="flex flex-col gap-1 mt-0.5">
-                    <button onClick={() => openEdit(l)} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors" title="Editar contrato">
-                      <Edit2 size={13} className="text-gray-400" />
-                    </button>
-                    <button onClick={() => del(l.id)} className="p-1.5 rounded-lg hover:bg-red-50 transition-colors" title="Eliminar contrato">
-                      <Trash2 size={14} className="text-red-400" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-4">
-                <div className="flex justify-between text-xs text-gray-400 mb-1.5">
-                  <span>Progreso del contrato</span>
-                  <span>{Math.round(Math.min(progress, 100))}%</span>
-                </div>
-                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-700 ${alert ? (days <= 15 ? "bg-red-500" : days <= 30 ? "bg-orange-400" : "bg-amber-400") : "bg-blue-500"}`}
-                    style={{ width: `${Math.min(progress, 100)}%` }}
-                  />
-                </div>
-              </div>
+        {tab === "activos" ? (
+          activos.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 py-12 text-center">
+              <FileText size={36} className="text-gray-200 mx-auto mb-3" />
+              <p className="font-medium text-gray-500">Sin contratos activos</p>
             </div>
-          );
-        })}
-        {leases.length === 0 && (
-          <div className="bg-white rounded-2xl border border-gray-100 py-16 text-center">
-            <FileText size={36} className="text-gray-200 mx-auto mb-3" />
-            <p className="font-medium text-gray-500">Sin contratos</p>
-          </div>
+          ) : (
+            activos.map(l => <LeaseCard key={l.id} l={l} />)
+          )
+        ) : (
+          finalizados.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 py-12 text-center">
+              <CheckCircle size={36} className="text-gray-200 mx-auto mb-3" />
+              <p className="font-medium text-gray-500">Sin contratos finalizados</p>
+            </div>
+          ) : (
+            finalizados.map(l => <LeaseCard key={l.id} l={l} />)
+          )
         )}
       </div>
 
-      {/* Punto 1 y 8: Modal de crear / editar contrato con selector de inquilino */}
-      <Modal open={modal} onClose={() => setModal(false)} title={editing ? "Editar Contrato" : "Nuevo Contrato"} wide>
+      {/* Modal nuevo / editar */}
+      <Modal open={modal} onClose={() => { setModal(false); setEditing(null); }} title={editing ? "Editar Contrato" : "Nuevo Contrato"} wide>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Field label="Propiedad">
-              <Select value={form.propertyId} onChange={e => setForm({...form, propertyId: e.target.value})}>
+              <Select value={form.propertyId} onChange={e => setForm({ ...form, propertyId: e.target.value })}>
                 <option value="">Seleccionar...</option>
-                {/* Al editar muestra todas las propiedades; al crear solo las vacantes */}
-                {(editing ? properties : properties.filter(p => p.status === "vacante"))
-                  .map(p => <option key={p.id} value={p.id}>{p.address}</option>)}
+                {properties.map(p => <option key={p.id} value={p.id}>{p.address}</option>)}
               </Select>
             </Field>
-            {/* Punto 8: permite elegir inquilino también al editar/renovar */}
             <Field label="Inquilino">
-              <Select value={form.tenantId} onChange={e => setForm({...form, tenantId: e.target.value})}>
+              <Select value={form.tenantId} onChange={e => setForm({ ...form, tenantId: e.target.value })}>
                 <option value="">Seleccionar...</option>
                 {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </Select>
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Fecha de inicio">
-              <Input type="date" value={form.startDate} onChange={e => { setForm({...form, startDate: e.target.value}); setFormError(""); }} />
-            </Field>
-            <Field label="Fecha de fin">
-              <Input type="date" value={form.endDate} onChange={e => { setForm({...form, endDate: e.target.value}); setFormError(""); }} />
-            </Field>
+            <Field label="Fecha de inicio"><Input type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} /></Field>
+            <Field label="Fecha de fin">   <Input type="date" value={form.endDate}   onChange={e => setForm({ ...form, endDate:    e.target.value })} /></Field>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Renta mensual (ARS)">
-              <Input type="number" placeholder="Ej: 350000" value={form.rent} onChange={e => setForm({...form, rent: e.target.value})} />
+              <Input type="number" placeholder="Ej: 350000" value={form.rent} onChange={e => setForm({ ...form, rent: e.target.value })} />
             </Field>
             <Field label="Aumento anual (%)" hint="Cláusula de ajuste por año">
-              <Input type="number" placeholder="Ej: 6" value={form.increase} onChange={e => setForm({...form, increase: e.target.value})} />
+              <Input type="number" placeholder="Ej: 6" value={form.increase} onChange={e => setForm({ ...form, increase: e.target.value })} />
             </Field>
           </div>
-
-          {/* Punto 5: muestra el error de fecha en vez de crear el contrato */}
-          {formError && (
-            <div className="flex items-start gap-2.5 p-3.5 bg-red-50 border border-red-200 rounded-xl">
-              <AlertTriangle size={15} className="text-red-500 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-600">{formError}</p>
-            </div>
-          )}
-
           <div className="flex gap-3 pt-2">
-            <button onClick={() => setModal(false)} className="flex-1 px-4 py-2.5 border border-gray-200 text-sm font-medium text-gray-600 rounded-xl hover:bg-gray-50 transition-colors">
+            <button onClick={() => { setModal(false); setEditing(null); }} className="flex-1 px-4 py-2.5 border border-gray-200 text-sm font-medium text-gray-600 rounded-xl hover:bg-gray-50 transition-colors">
               Cancelar
             </button>
             <button onClick={save} disabled={saving} className="flex-1 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors">
-              {saving ? "Guardando…" : (editing ? "Actualizar Contrato" : "Crear Contrato")}
+              {saving ? "Guardando…" : (editing ? "Actualizar" : "Crear Contrato")}
             </button>
           </div>
         </div>
+      </Modal>
+
+      {/* Modal renovación */}
+      <Modal open={renewModal} onClose={() => { setRenewModal(false); setRenewTarget(null); }} title="Renovar Contrato" wide>
+        {renewTarget && (
+          <div className="space-y-4">
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+              <p className="text-xs font-semibold text-blue-600 mb-1">Contrato anterior</p>
+              <p className="text-sm font-medium text-gray-800">
+                {properties.find(p => p.id === renewTarget.propertyId)?.address}
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {fmtDate(renewTarget.startDate)} → {fmtDate(renewTarget.endDate)} · {fmtCurrency(renewTarget.rent)}/mes
+              </p>
+            </div>
+            <p className="text-sm text-gray-600">
+              El contrato anterior pasará a estado <strong>Renovado</strong>. Completá los datos del nuevo período:
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Nueva fecha de inicio">
+                <Input type="date" value={renewForm.startDate} onChange={e => setRenewForm({ ...renewForm, startDate: e.target.value })} />
+              </Field>
+              <Field label="Nueva fecha de fin">
+                <Input type="date" value={renewForm.endDate} onChange={e => setRenewForm({ ...renewForm, endDate: e.target.value })} />
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Nueva renta mensual (ARS)" hint="Pre-calculado con el aumento aplicado">
+                <Input type="number" value={renewForm.rent} onChange={e => setRenewForm({ ...renewForm, rent: e.target.value })} />
+              </Field>
+              <Field label="Aumento anual (%)" hint="Para el nuevo contrato">
+                <Input type="number" value={renewForm.increase} onChange={e => setRenewForm({ ...renewForm, increase: e.target.value })} />
+              </Field>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button onClick={() => { setRenewModal(false); setRenewTarget(null); }} className="flex-1 px-4 py-2.5 border border-gray-200 text-sm font-medium text-gray-600 rounded-xl hover:bg-gray-50 transition-colors">
+                Cancelar
+              </button>
+              <button onClick={confirmRenew} disabled={saving} className="flex-1 px-4 py-2.5 bg-emerald-600 text-white text-sm font-medium rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+                <RefreshCw size={14} />
+                {saving ? "Renovando…" : "Confirmar Renovación"}
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );
 }
 
 // ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
-
 function Notifications({ leases, properties, tenants }) {
   const notifications = leases
-    .filter(l => l.status === "activo")
+    .filter(l => l.status === "activo" && new Date(l.endDate) >= new Date())
     .map(l => {
       const days  = diffDays(l.endDate);
       const level = getAlertLevel(days);
@@ -858,9 +980,7 @@ function Notifications({ leases, properties, tenants }) {
     .filter(Boolean)
     .sort((a, b) => a.days - b.days);
 
-  const ok = leases
-    .filter(l => l.status === "activo" && diffDays(l.endDate) > 90)
-    .sort((a, b) => diffDays(a.endDate) - diffDays(b.endDate));
+  const ok = leases.filter(l => l.status === "activo" && diffDays(l.endDate) > 90);
 
   return (
     <div className="space-y-6">
@@ -885,95 +1005,55 @@ function Notifications({ leases, properties, tenants }) {
         ))}
       </div>
 
-      {notifications.length === 0 && ok.length === 0 && (
-        <div className="bg-white rounded-2xl border border-gray-100 py-16 text-center">
-          <CheckCircle size={36} className="text-emerald-400 mx-auto mb-3" />
-          <p className="font-medium text-gray-700">Sin alertas activas</p>
-          <p className="text-sm text-gray-400 mt-1">Todos los contratos están en regla</p>
-        </div>
-      )}
-
-      {notifications.length > 0 && (
-        <div className="space-y-3">
-          {notifications.map(n => (
-            <div key={n.id} className={`bg-white rounded-2xl border p-5 ${n.level.border} ${n.level.bg}`}>
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-4">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${n.level.bg} border ${n.level.border}`}>
-                    <AlertTriangle size={16} className={n.level.color} />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="font-semibold text-gray-800">{n.prop?.address}</p>
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${n.level.bg} ${n.level.color} border ${n.level.border}`}>{n.level.label}</span>
-                    </div>
-                    <p className="text-sm text-gray-500 mt-0.5">Inquilino: {n.tenant?.name}</p>
-                    <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                      <span className="flex items-center gap-1"><Calendar size={11} />Vence: {fmtDate(n.endDate)}</span>
-                      <span className="flex items-center gap-1"><DollarSign size={11} />{fmtCurrency(n.rent)}/mes</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  {n.days <= 0 ? (
-                    <p className={`text-xl font-black ${n.level.color}`}>Venció</p>
-                  ) : (
-                    <>
-                      <p className={`text-3xl font-black ${n.level.color}`}>{n.days}</p>
-                      <p className="text-xs text-gray-500">días restantes</p>
-                    </>
-                  )}
-                </div>
-              </div>
+      <div className="space-y-3">
+        {notifications.length === 0 && (
+          <div className="bg-white rounded-2xl border border-gray-100 py-16 text-center">
+            <CheckCircle size={36} className="text-emerald-400 mx-auto mb-3" />
+            <p className="font-medium text-gray-700">Sin alertas activas</p>
+            <p className="text-sm text-gray-400 mt-1">Todos los contratos están en regla</p>
+          </div>
+        )}
+        {notifications.map(a => (
+          <div key={a.id} className={`flex items-center gap-4 p-3.5 rounded-xl border ${a.level.bg} ${a.level.border}`}>
+            <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${a.level.dot}`} />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-800 truncate">{a.prop?.address}</p>
+              <p className="text-xs text-gray-500">{a.tenant?.name}</p>
             </div>
-          ))}
-        </div>
-      )}
+            <div className="text-right flex-shrink-0">
+              <p className={`text-sm font-bold ${a.level.color}`}>{a.days === 0 ? "Hoy" : `${a.days}d`}</p>
+              <p className={`text-xs ${a.level.color}`}>{a.level.label}</p>
+            </div>
+          </div>
+        ))}
+      </div>
 
-      {/* Punto 2: contratos sin alertas con estilo de card verde (igual que los de alerta) */}
       {ok.length > 0 && (
-        <div className="space-y-3">
-          <p className="text-sm font-medium text-gray-500">Contratos al día ({ok.length})</p>
-          {ok.map(l => {
-            const prop   = properties.find(p => p.id === l.propertyId);
-            const tenant = tenants.find(t => t.id === l.tenantId);
-            const days   = diffDays(l.endDate);
-            return (
-              <div key={l.id} className="bg-emerald-50 rounded-2xl border border-emerald-200 p-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-4">
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 bg-emerald-50 border border-emerald-200">
-                      <CheckCircle size={16} className="text-emerald-600" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-semibold text-gray-800">{prop?.address}</p>
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Al día</span>
-                      </div>
-                      <p className="text-sm text-gray-500 mt-0.5">Inquilino: {tenant?.name}</p>
-                      <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                        <span className="flex items-center gap-1"><Calendar size={11} />Vence: {fmtDate(l.endDate)}</span>
-                        <span className="flex items-center gap-1"><DollarSign size={11} />{fmtCurrency(l.rent)}/mes</span>
-                      </div>
-                    </div>
+        <div>
+          <p className="text-sm font-medium text-gray-500 mb-3">Contratos sin alertas ({ok.length})</p>
+          <div className="space-y-2">
+            {ok.map(l => {
+              const prop   = properties.find(p => p.id === l.propertyId);
+              const tenant = tenants.find(t => t.id === l.tenantId);
+              return (
+                <div key={l.id} className="bg-white rounded-xl border border-emerald-200 px-4 py-3 flex items-center gap-3">
+                  <CheckCircle size={14} className="text-emerald-400 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-700 truncate">{prop?.address}</p>
+                    <p className="text-xs text-gray-400">{tenant?.name}</p>
                   </div>
-                  {/* Punto 3: muestra en meses si > 90 días */}
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-2xl font-black text-emerald-600">{fmtDuration(days)}</p>
-                    <p className="text-xs text-gray-500">restantes</p>
-                  </div>
+                  <p className="text-xs text-gray-400 flex-shrink-0">Vence {fmtDate(l.endDate)}</p>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-// ─── SIDEBAR ──────────────────────────────────────────────────────────────────
-
+// ─── SIDEBAR ─────────────────────────────────────────────────────────────────
 const NAV = [
   { id: "dashboard",     label: "Dashboard",   icon: LayoutDashboard },
   { id: "properties",    label: "Propiedades", icon: Building2 },
@@ -1035,23 +1115,53 @@ function Sidebar({ active, setActive, alertCount }) {
 }
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
-
 export default function App() {
   const [active, setActive] = useState("dashboard");
+  const [dark, setDark] = useState(() => localStorage.getItem('darkMode') === 'true');
+  useEffect(() => {
+    const root = document.documentElement;
+    if (dark) {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('darkMode', dark);
+  }, [dark]);
 
-  const { data: properties, setData: setProperties, loading: lProps,   error: eProps,   reload: reloadProps }  = useApi("/api/properties");
-  const { data: owners,     setData: setOwners,     loading: lOwners,  error: eOwners,  reload: reloadOwners } = useApi("/api/owners");
-  const { data: tenants,    setData: setTenants,    loading: lTenants, error: eTenants, reload: reloadTenants }= useApi("/api/tenants");
-  const { data: leases,     setData: setLeases,     loading: lLeases,  error: eLeases,  reload: reloadLeases } = useApi("/api/leases");
+  const { data: properties, setData: setProperties, loading: lProps,   error: eProps,   reload: reloadProps }   = useApi("/api/properties");
+  const { data: owners,     setData: setOwners,     loading: lOwners,  error: eOwners,  reload: reloadOwners }  = useApi("/api/owners");
+  const { data: tenants,    setData: setTenants,    loading: lTenants, error: eTenants, reload: reloadTenants } = useApi("/api/tenants");
+  const { data: leases,     setData: setLeases,     loading: lLeases,  error: eLeases,  reload: reloadLeases }  = useApi("/api/leases");
 
   const loading = lProps || lOwners || lTenants || lLeases;
   const error   = eProps || eOwners || eTenants || eLeases;
 
-  const alertCount = useMemo(
+  const alertCountRaw = useMemo(
     () => leases.filter(l => l.status === "activo" && getAlertLevel(diffDays(l.endDate))).length,
     [leases]
   );
 
+  // Badge: solo se oculta cuando no hay alertas, o al entrar a la sección, pero si aparece una alerta nueva, se muestra inmediatamente
+  const [badgeDismissed, setBadgeDismissed] = useState(false);
+
+  // Si la cantidad de alertas aumenta, mostrar el badge inmediatamente
+  const prevAlertCountRef = useRef(alertCountRaw);
+  useEffect(() => {
+    if (alertCountRaw > prevAlertCountRef.current) {
+      setBadgeDismissed(false);
+    }
+    prevAlertCountRef.current = alertCountRaw;
+  }, [alertCountRaw]);
+
+  // Al entrar a "notifications" → ocultar badge
+  const handleSetActive = (id) => {
+    setActive(id);
+    if (id === "notifications") {
+      setBadgeDismissed(true);
+    }
+  };
+
+  const alertCount = badgeDismissed ? 0 : alertCountRaw;
   const shared = { properties, setProperties, owners, setOwners, tenants, setTenants, leases, setLeases };
 
   if (loading) {
@@ -1079,11 +1189,11 @@ export default function App() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50/80 font-sans">
-      <Sidebar active={active} setActive={setActive} alertCount={alertCount} />
+    <div className="flex min-h-screen bg-gray-50/80 dark:bg-gray-900 font-sans">
+      <Sidebar active={active} setActive={handleSetActive} alertCount={alertCount} />
       <main className="flex-1 overflow-auto">
-        <div className="max-w-5xl mx-auto px-6 py-8">
-          {active === "dashboard"     && <Dashboard     {...shared} />}
+        <div className="max-w-5xl mx-auto px-6 py-8 bg-white dark:bg-gray-900 rounded-2xl">
+          {active === "dashboard"     && <Dashboard     {...shared} dark={dark} setDark={setDark} />}
           {active === "properties"    && <Properties    {...shared} />}
           {active === "contacts"      && <Contacts      {...shared} />}
           {active === "leases"        && <Leases        {...shared} />}
