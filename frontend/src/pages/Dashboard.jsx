@@ -1,13 +1,21 @@
 import { Bell, Building2, CheckCircle, DollarSign, FileText, Key } from "lucide-react";
-import { StatCard } from "../components/ui/Statcard";
+import { StatCard } from "../components/ui/StatCard";
 import { fmtDate, fmtCurrency, fmtDuration, diffDays, getAlertLevel } from "../utils/helpers";
 
 const today = new Date();
 
 export function Dashboard({ properties, leases, tenants }) {
-  const occupied  = properties.filter(p => p.status === "ocupado").length;
-  const vacant    = properties.filter(p => p.status === "vacante").length;
-  const totalRent = leases.filter(l => l.status === "activo").reduce((s, l) => s + l.rent, 0);
+  // PRUEBA DE RENDERIZADO VISIBLE
+  return (
+    <div style={{ background: '#f0f4f8', minHeight: '100vh', padding: 40 }}>
+      <h1 style={{ color: '#2563eb', fontSize: 32, fontWeight: 700 }}>¡Dashboard Renderizado!</h1>
+      <p style={{ color: '#333', fontSize: 18 }}>Si ves este mensaje, el componente Dashboard está funcionando.</p>
+    </div>
+  );
+  // --- El código original del dashboard está temporalmente oculto para esta prueba visual ---
+  // const occupied  = properties.filter(p => p.status === "ocupado").length;
+  // const vacant    = properties.filter(p => p.status === "vacante").length;
+  // const totalRent = leases.filter(l => l.status === "activo").reduce((s, l) => s + l.rent, 0);
 
   const alerts = leases
     .filter(l => l.status === "activo")

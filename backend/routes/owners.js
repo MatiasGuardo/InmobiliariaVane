@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { pool } from "../../db.js";
+import { pool } from "../db.js";
 import { mapOwner, splitName } from "../mappers.js";
 
 const router = Router();
