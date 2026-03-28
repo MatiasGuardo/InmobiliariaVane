@@ -4,6 +4,14 @@ import { mapLease } from "../mappers.js";
 
 const router = Router();
 
+// Construye el string de indice_ajuste para la BD
+// Ej: { increase: 10, period: "trimestral" } → "10% trimestral"
+function buildIndiceAjuste(increase, period) {
+  if (!increase) return null;
+  const p = ["trimestral", "semestral", "anual"].includes(period) ? period : "anual";
+  return `${increase}% ${p}`;
+}
+
 // GET /api/leases
 router.get("/", async (_req, res) => {
   try {
@@ -21,7 +29,7 @@ router.get("/", async (_req, res) => {
 
 // POST /api/leases
 router.post("/", async (req, res) => {
-  const { propertyId, tenantId, startDate, endDate, rent, increase } = req.body;
+  const { propertyId, tenantId, startDate, endDate, rent, increase, period } = req.body;
   if (!propertyId || !tenantId || !startDate || !endDate || !rent)
     return res.status(400).json({ error: "Faltan campos obligatorios" });
 
@@ -34,13 +42,14 @@ router.post("/", async (req, res) => {
     );
     if (!prop) throw new Error("Propiedad no encontrada");
 
+    const indiceAjuste = buildIndiceAjuste(increase, period);
+
     const [result] = await conn.query(
       `INSERT INTO contratos
          (propiedad_id, inquilino_id, propietario_id, fecha_inicio, fecha_fin,
           monto_renta, moneda, estado_contrato, indice_ajuste)
        VALUES (?, ?, ?, ?, ?, ?, 'ARS', 'activo', ?)`,
-      [propertyId, tenantId, prop.id_propietario, startDate, endDate, rent,
-       increase ? `${increase}% anual` : null]
+      [propertyId, tenantId, prop.id_propietario, startDate, endDate, rent, indiceAjuste]
     );
 
     // Marcar propiedad como alquilada
@@ -50,6 +59,8 @@ router.post("/", async (req, res) => {
 
     await conn.commit();
 
+    const resolvedPeriod = ["trimestral", "semestral", "anual"].includes(period) ? period : "anual";
+
     res.status(201).json({
       id:         String(result.insertId),
       propertyId: String(propertyId),
@@ -57,6 +68,7 @@ router.post("/", async (req, res) => {
       startDate, endDate,
       rent:     Number(rent),
       increase: Number(increase) || 6,
+      period:   resolvedPeriod,
       status:   "activo",
     });
   } catch (err) {
@@ -71,7 +83,7 @@ router.post("/", async (req, res) => {
 // PUT /api/leases/:id
 router.put("/:id", async (req, res) => {
   const { id } = req.params;
-  const { propertyId, tenantId, startDate, endDate, rent, increase, status } = req.body;
+  const { propertyId, tenantId, startDate, endDate, rent, increase, period, status } = req.body;
   if (!propertyId || !tenantId || !startDate || !endDate || !rent)
     return res.status(400).json({ error: "Faltan campos obligatorios" });
 
@@ -84,6 +96,8 @@ router.put("/:id", async (req, res) => {
     );
     if (!prop) throw new Error("Propiedad no encontrada");
 
+    const indiceAjuste = buildIndiceAjuste(increase, period);
+
     await conn.query(
       `UPDATE contratos SET
          propiedad_id = ?, inquilino_id = ?, propietario_id = ?,
@@ -91,7 +105,7 @@ router.put("/:id", async (req, res) => {
          indice_ajuste = ?, estado_contrato = ?
        WHERE id = ?`,
       [propertyId, tenantId, prop.id_propietario, startDate, endDate, rent,
-       increase ? `${increase}% anual` : null, status || "activo", id]
+       indiceAjuste, status || "activo", id]
     );
 
     await conn.commit();

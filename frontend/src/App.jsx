@@ -11,7 +11,9 @@ import { useTheme }      from "./hooks/useTheme";
 import { useAlerts }     from "./hooks/useAlerts";
 
 export default function App() {
-  const [active, setActive] = useState("dashboard");
+  const [active,      setActiveRaw] = useState("dashboard");
+  const [propFilter,  setPropFilter] = useState("todos");
+  const [leaseFilter, setLeaseFilter] = useState("activo");
   const { dark, toggleDark } = useTheme();
 
   const { data: properties, setData: setProperties, loading: lProps,   error: eProps,   reload: reloadProps }   = useApi("/api/properties");
@@ -22,14 +24,22 @@ export default function App() {
   const loading = lProps || lOwners || lTenants || lLeases;
   const error   = eProps || eOwners || eTenants || eLeases;
 
-  // ── Sistema de alertas ────────────────────────────────────
   const { badgeCount, dismiss, activeAlerts } = useAlerts(leases);
 
-  const handleSetActive = (id) => setActive(id);
+  // setActive acepta string simple o { page, filter }
+  const handleSetActive = (target) => {
+    if (typeof target === "string") {
+      setActiveRaw(target);
+    } else {
+      const { page, filter } = target;
+      setActiveRaw(page);
+      if (page === "properties" && filter) setPropFilter(filter);
+      if (page === "leases"     && filter) setLeaseFilter(filter);
+    }
+  };
 
   const shared = { properties, setProperties, owners, setOwners, tenants, setTenants, leases, setLeases };
 
-  // ── Loading ──────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
@@ -41,7 +51,6 @@ export default function App() {
     );
   }
 
-  // ── Error ────────────────────────────────────────────────────
   if (error) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900 p-8">
@@ -61,7 +70,6 @@ export default function App() {
     );
   }
 
-  // ── App ──────────────────────────────────────────────────────
   return (
     <div className="flex min-h-screen bg-gray-50/80 dark:bg-gray-900 font-sans">
       <Sidebar
@@ -74,9 +82,9 @@ export default function App() {
       <main className="flex-1 overflow-auto">
         <div className="max-w-5xl mx-auto px-6 py-8">
           {active === "dashboard"     && <Dashboard     {...shared} setActive={handleSetActive} activeAlerts={activeAlerts} />}
-          {active === "properties"    && <Properties    {...shared} />}
+          {active === "properties"    && <Properties    {...shared} initialFilter={propFilter} />}
           {active === "contacts"      && <Contacts      {...shared} />}
-          {active === "leases"        && <Leases        {...shared} />}
+          {active === "leases"        && <Leases        {...shared} initialTab={leaseFilter} />}
           {active === "notifications" && <Notifications {...shared} activeAlerts={activeAlerts} dismiss={dismiss} />}
         </div>
       </main>

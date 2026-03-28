@@ -37,6 +37,7 @@ function StatCard({ icon: Icon, label, value, sub, color = "blue", trend, onClic
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
+// setActive ahora acepta un objeto { page, filter } además de un string simple
 export function Dashboard({ properties, leases, tenants, setActive, activeAlerts }) {
   const occupied  = properties.filter(p => p.status === "ocupado").length;
   const vacant    = properties.filter(p => p.status === "vacante").length;
@@ -70,35 +71,35 @@ export function Dashboard({ properties, leases, tenants, setActive, activeAlerts
         </p>
       </div>
 
-      {/* Stats — todos navegables */}
+      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           icon={Building2} label="Propiedades Totales" value={properties.length}
           color="blue" trend={8}
-          onClick={() => setActive("properties")}
+          onClick={() => setActive({ page: "properties", filter: "todos" })}
         />
         <StatCard
           icon={CheckCircle} label="Propiedades Ocupadas" value={occupied}
           sub={properties.length ? `${Math.round(occupied / properties.length * 100)}% ocupación` : ""}
           color="green"
-          onClick={() => setActive("properties")}
+          onClick={() => setActive({ page: "properties", filter: "ocupado" })}
         />
         <StatCard
           icon={Key} label="Vacantes" value={vacant}
           color="orange"
-          onClick={() => setActive("properties")}
+          onClick={() => setActive({ page: "properties", filter: "vacante" })}
         />
         <StatCard
           icon={DollarSign} label="Renta Mensual Total" value={fmtCurrency(totalRent)}
           color="slate" trend={6}
-          onClick={() => setActive("leases")}
+          onClick={() => setActive({ page: "leases", filter: "activo" })}
         />
       </div>
 
       {/* Barra de ocupación */}
       {properties.length > 0 && (
         <button
-          onClick={() => setActive("properties")}
+          onClick={() => setActive({ page: "properties", filter: "todos" })}
           className="w-full text-left bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 hover:shadow-md hover:ring-2 hover:ring-blue-200 dark:hover:ring-blue-800 transition-all"
         >
           <div className="flex items-center justify-between mb-3">
@@ -120,7 +121,7 @@ export function Dashboard({ properties, leases, tenants, setActive, activeAlerts
         </button>
       )}
 
-      {/* Alertas — navegan a notificaciones */}
+      {/* Alertas */}
       {dashAlerts.length > 0 && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5">
           <div className="flex items-center gap-2 mb-4">
@@ -134,7 +135,7 @@ export function Dashboard({ properties, leases, tenants, setActive, activeAlerts
             {dashAlerts.map(a => (
               <button
                 key={a.id}
-                onClick={() => setActive("notifications")}
+                onClick={() => setActive({ page: "notifications" })}
                 className={`w-full text-left flex items-center gap-4 p-3.5 rounded-xl border transition-all hover:opacity-80 ${a.level.bg} ${a.level.border}`}
               >
                 <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${a.level.dot}`} />
@@ -154,7 +155,7 @@ export function Dashboard({ properties, leases, tenants, setActive, activeAlerts
         </div>
       )}
 
-      {/* Contratos recientes — navegan a contratos */}
+      {/* Contratos recientes */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5">
         <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-4">Contratos Activos Recientes</h3>
         {recentLeases.length === 0 ? (
@@ -169,7 +170,7 @@ export function Dashboard({ properties, leases, tenants, setActive, activeAlerts
               return (
                 <button
                   key={l.id}
-                  onClick={() => setActive("leases")}
+                  onClick={() => setActive({ page: "leases", filter: "activo" })}
                   className="w-full text-left flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                 >
                   <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
