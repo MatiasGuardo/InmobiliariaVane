@@ -1,0 +1,184 @@
+import { useState } from "react";
+import { Building2, Edit2, Plus, Search, Trash2, User } from "lucide-react";
+import { Modal } from "../components/ui/Modal";
+import { Field, Input, Select } from "../components/ui/FormField";
+import { Badge } from "../components/ui/Badge";
+import { fmtCurrency, API } from "../utils/helpers";
+
+const TIPOS = ["Departamento","Casa","Local Comercial","Oficina","Galpón","Terreno","Otro"];
+
+export function Properties({ properties, setProperties, owners }) {
+  const [search,  setSearch]  = useState("");
+  const [filter,  setFilter]  = useState("todos");
+  const [modal,   setModal]   = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [saving,  setSaving]  = useState(false);
+  const [form, setForm] = useState({ address: "", type: "Departamento", price: "", status: "vacante", ownerId: "" });
+
+  const filtered = properties.filter(p => {
+    const matchSearch = p.address.toLowerCase().includes(search.toLowerCase());
+    const matchFilter = filter === "todos" || p.status === filter;
+    return matchSearch && matchFilter;
+  });
+
+  const openNew  = () => { setEditing(null); setForm({ address: "", type: "Departamento", price: "", status: "vacante", ownerId: "" }); setModal(true); };
+  const openEdit = (p) => { setEditing(p.id); setForm({ address: p.address, type: p.type, price: p.price, status: p.status, ownerId: p.ownerId }); setModal(true); };
+
+  const save = async () => {
+    if (!form.address || !form.price) return;
+    setSaving(true);
+    try {
+      const method = editing ? "PUT" : "POST";
+      const url    = editing ? `${API}/api/properties/${editing}` : `${API}/api/properties`;
+      const res    = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, price: Number(form.price) }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const saved = await res.json();
+      setProperties(prev => editing ? prev.map(p => p.id === editing ? saved : p) : [...prev, saved]);
+      setModal(false);
+    } catch (e) {
+      alert("Error al guardar: " + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const del = async (id) => {
+    if (!confirm("¿Eliminar esta propiedad?")) return;
+    try {
+      await fetch(`${API}/api/properties/${id}`, { method: "DELETE" });
+      setProperties(prev => prev.filter(p => p.id !== id));
+    } catch (e) {
+      alert("Error al eliminar: " + e.message);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Propiedades</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{properties.length} propiedades registradas</p>
+        </div>
+        <button onClick={openNew} className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200">
+          <Plus size={16} /> Nueva Propiedad
+        </button>
+      </div>
+
+      {/* Búsqueda y filtros */}
+      <div className="flex gap-3">
+        <div className="relative flex-1">
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar por dirección..."
+            className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 outline-none transition-all placeholder:text-gray-400"
+          />
+        </div>
+        <div className="flex gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl p-1">
+          {["todos","ocupado","vacante"].map(f => (
+            <button key={f} onClick={() => setFilter(f)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all capitalize ${
+                filter === f
+                  ? "bg-blue-600 text-white"
+                  : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+              }`}>
+              {f}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Lista */}
+      <div className="grid gap-3">
+        {filtered.map(p => {
+          const owner = owners.find(o => o.id === p.ownerId);
+          return (
+            <div key={p.id} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 hover:shadow-md transition-all">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-4 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                    <Building2 size={16} className="text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-gray-800 dark:text-gray-200 truncate">{p.address}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{p.type}</p>
+                    <div className="flex items-center gap-3 mt-2 text-xs text-gray-400 dark:text-gray-500">
+                      {owner && <span className="flex items-center gap-1"><User size={11} />{owner.name}</span>}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 flex-shrink-0">
+                  <div className="text-right">
+                    <p className="font-bold text-gray-900 dark:text-gray-100">{fmtCurrency(p.price)}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">por mes</p>
+                    <Badge status={p.status} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <button onClick={() => openEdit(p)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                      <Edit2 size={13} className="text-gray-400" />
+                    </button>
+                    <button onClick={() => del(p.id)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                      <Trash2 size={13} className="text-red-400" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        {filtered.length === 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 py-16 text-center">
+            <Building2 size={36} className="text-gray-200 dark:text-gray-600 mx-auto mb-3" />
+            <p className="font-medium text-gray-500 dark:text-gray-400">Sin propiedades</p>
+          </div>
+        )}
+      </div>
+
+      {/* Modal */}
+      <Modal open={modal} onClose={() => setModal(false)} title={editing ? "Editar Propiedad" : "Nueva Propiedad"} wide>
+        <div className="space-y-4">
+          <Field label="Dirección completa">
+            <Input placeholder="Av. Santa Fe 2450, Piso 3B" value={form.address} onChange={e => setForm({...form, address: e.target.value})} />
+          </Field>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Tipo">
+              <Select value={form.type} onChange={e => setForm({...form, type: e.target.value})}>
+                {TIPOS.map(t => <option key={t}>{t}</option>)}
+              </Select>
+            </Field>
+            <Field label="Estado">
+              <Select value={form.status} onChange={e => setForm({...form, status: e.target.value})}>
+                <option value="vacante">Vacante</option>
+                <option value="ocupado">Ocupado</option>
+              </Select>
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Precio lista (ARS)">
+              <Input type="number" placeholder="Ej: 320000" value={form.price} onChange={e => setForm({...form, price: e.target.value})} />
+            </Field>
+            <Field label="Propietario">
+              <Select value={form.ownerId} onChange={e => setForm({...form, ownerId: e.target.value})}>
+                <option value="">Seleccionar...</option>
+                {owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </Select>
+            </Field>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button onClick={() => setModal(false)} className="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-600 text-sm font-medium text-gray-600 dark:text-gray-400 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+              Cancelar
+            </button>
+            <button onClick={save} disabled={saving} className="flex-1 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors">
+              {saving ? "Guardando…" : (editing ? "Actualizar" : "Crear Propiedad")}
+            </button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
