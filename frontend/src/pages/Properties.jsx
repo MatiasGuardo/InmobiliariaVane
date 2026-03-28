@@ -5,7 +5,7 @@ import { Field, Input, Select } from "../components/ui/FormField";
 import { Badge } from "../components/ui/Badge";
 import { fmtCurrency, API } from "../utils/helpers";
 
-const TIPOS = ["Departamento","Casa","Local Comercial","Oficina","Galpón","Terreno","Otro"];
+const TIPOS = ["Departamento", "Casa", "Local Comercial", "Oficina", "Galpón", "Terreno", "Otro"];
 
 export function Properties({ properties, setProperties, owners }) {
   const [search,  setSearch]  = useState("");
@@ -68,7 +68,6 @@ export function Properties({ properties, setProperties, owners }) {
         </button>
       </div>
 
-      {/* Búsqueda y filtros */}
       <div className="flex gap-3">
         <div className="relative flex-1">
           <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -80,12 +79,10 @@ export function Properties({ properties, setProperties, owners }) {
           />
         </div>
         <div className="flex gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl p-1">
-          {["todos","ocupado","vacante"].map(f => (
+          {["todos", "ocupado", "vacante"].map(f => (
             <button key={f} onClick={() => setFilter(f)}
               className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all capitalize ${
-                filter === f
-                  ? "bg-blue-600 text-white"
-                  : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                filter === f ? "bg-blue-600 text-white" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
               }`}>
               {f}
             </button>
@@ -93,7 +90,6 @@ export function Properties({ properties, setProperties, owners }) {
         </div>
       </div>
 
-      {/* Lista */}
       <div className="grid gap-3">
         {filtered.map(p => {
           const owner = owners.find(o => o.id === p.ownerId);
@@ -135,24 +131,24 @@ export function Properties({ properties, setProperties, owners }) {
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 py-16 text-center">
             <Building2 size={36} className="text-gray-200 dark:text-gray-600 mx-auto mb-3" />
             <p className="font-medium text-gray-500 dark:text-gray-400">Sin propiedades</p>
+            <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">Agrega tu primera propiedad</p>
           </div>
         )}
       </div>
 
-      {/* Modal */}
       <Modal open={modal} onClose={() => setModal(false)} title={editing ? "Editar Propiedad" : "Nueva Propiedad"} wide>
         <div className="space-y-4">
           <Field label="Dirección completa">
-            <Input placeholder="Av. Santa Fe 2450, Piso 3B" value={form.address} onChange={e => setForm({...form, address: e.target.value})} />
+            <Input placeholder="Av. Santa Fe 2450, Piso 3B" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} />
           </Field>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Tipo">
-              <Select value={form.type} onChange={e => setForm({...form, type: e.target.value})}>
+              <Select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
                 {TIPOS.map(t => <option key={t}>{t}</option>)}
               </Select>
             </Field>
             <Field label="Estado">
-              <Select value={form.status} onChange={e => setForm({...form, status: e.target.value})}>
+              <Select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
                 <option value="vacante">Vacante</option>
                 <option value="ocupado">Ocupado</option>
               </Select>
@@ -160,10 +156,10 @@ export function Properties({ properties, setProperties, owners }) {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Precio lista (ARS)">
-              <Input type="number" placeholder="Ej: 320000" value={form.price} onChange={e => setForm({...form, price: e.target.value})} />
+              <Input type="number" placeholder="Ej: 320000" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} />
             </Field>
             <Field label="Propietario">
-              <Select value={form.ownerId} onChange={e => setForm({...form, ownerId: e.target.value})}>
+              <Select value={form.ownerId} onChange={e => setForm({ ...form, ownerId: e.target.value })}>
                 <option value="">Seleccionar...</option>
                 {owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
               </Select>

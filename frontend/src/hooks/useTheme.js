@@ -1,19 +1,16 @@
 import { useState, useEffect } from "react";
 
-/**
- * Hook para manejar el modo oscuro.
- * Persiste la preferencia en localStorage y aplica la clase "dark" al <html>.
- */
 export function useTheme() {
+  // Invertimos la lógica: ahora 'dark' es true cuando el usuario quiere modo claro
   const [dark, setDark] = useState(() => {
     const stored = localStorage.getItem("theme");
-    if (stored) return stored === "dark";
-    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+    if (stored) return stored === "light";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches === false;
   });
 
   useEffect(() => {
     const root = document.documentElement;
-    if (dark) {
+    if (!dark) {
       root.classList.add("dark");
       localStorage.setItem("theme", "dark");
     } else {
