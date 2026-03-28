@@ -1,10 +1,6 @@
 import { useState, useEffect } from "react";
 import { API } from "../utils/helpers";
 
-/**
- * Hook genérico para consumir endpoints de la API.
- * Retorna { data, setData, loading, error, reload }
- */
 export function useApi(endpoint) {
   const [data,    setData]    = useState([]);
   const [loading, setLoading] = useState(true);

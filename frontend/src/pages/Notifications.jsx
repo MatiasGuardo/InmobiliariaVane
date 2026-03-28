@@ -3,16 +3,12 @@ import { fmtDate, fmtCurrency, fmtDuration, diffDays, getAlertLevel } from "../u
 
 export function Notifications({ leases, properties, tenants }) {
   const notifications = leases
-    .filter(l => l.status === "activo")
+    .filter(l => l.status === "activo" && new Date(l.endDate) >= new Date())
     .map(l => {
       const days  = diffDays(l.endDate);
       const level = getAlertLevel(days);
       if (!level) return null;
-      return {
-        ...l, days, level,
-        prop:   properties.find(p => p.id === l.propertyId),
-        tenant: tenants.find(t => t.id === l.tenantId),
-      };
+      return { ...l, days, level, prop: properties.find(p => p.id === l.propertyId), tenant: tenants.find(t => t.id === l.tenantId) };
     })
     .filter(Boolean)
     .sort((a, b) => a.days - b.days);
@@ -45,7 +41,7 @@ export function Notifications({ leases, properties, tenants }) {
         ))}
       </div>
 
-      {/* Sin alertas y sin contratos */}
+      {/* Sin nada */}
       {notifications.length === 0 && ok.length === 0 && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 py-16 text-center">
           <CheckCircle size={36} className="text-emerald-400 mx-auto mb-3" />
@@ -54,7 +50,7 @@ export function Notifications({ leases, properties, tenants }) {
         </div>
       )}
 
-      {/* Contratos con alerta */}
+      {/* Alertas */}
       {notifications.length > 0 && (
         <div className="space-y-3">
           {notifications.map(n => (
@@ -94,7 +90,7 @@ export function Notifications({ leases, properties, tenants }) {
         </div>
       )}
 
-      {/* Contratos al día — card verde */}
+      {/* Contratos al día */}
       {ok.length > 0 && (
         <div className="space-y-3">
           <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Contratos al día ({ok.length})</p>

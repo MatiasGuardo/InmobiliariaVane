@@ -2,20 +2,10 @@ import { Bell, Building2, CheckCircle, DollarSign, FileText, Key } from "lucide-
 import { StatCard } from "../components/ui/StatCard";
 import { fmtDate, fmtCurrency, fmtDuration, diffDays, getAlertLevel } from "../utils/helpers";
 
-const today = new Date();
-
 export function Dashboard({ properties, leases, tenants }) {
-  // PRUEBA DE RENDERIZADO VISIBLE
-  return (
-    <div style={{ background: '#f0f4f8', minHeight: '100vh', padding: 40 }}>
-      <h1 style={{ color: '#2563eb', fontSize: 32, fontWeight: 700 }}>¡Dashboard Renderizado!</h1>
-      <p style={{ color: '#333', fontSize: 18 }}>Si ves este mensaje, el componente Dashboard está funcionando.</p>
-    </div>
-  );
-  // --- El código original del dashboard está temporalmente oculto para esta prueba visual ---
-  // const occupied  = properties.filter(p => p.status === "ocupado").length;
-  // const vacant    = properties.filter(p => p.status === "vacante").length;
-  // const totalRent = leases.filter(l => l.status === "activo").reduce((s, l) => s + l.rent, 0);
+  const occupied  = properties.filter(p => p.status === "ocupado").length;
+  const vacant    = properties.filter(p => p.status === "vacante").length;
+  const totalRent = leases.filter(l => l.status === "activo").reduce((s, l) => s + l.rent, 0);
 
   const alerts = leases
     .filter(l => l.status === "activo")
@@ -23,16 +13,13 @@ export function Dashboard({ properties, leases, tenants }) {
       const days  = diffDays(l.endDate);
       const level = getAlertLevel(days);
       if (!level) return null;
-      return {
-        ...l, days, level,
-        prop:   properties.find(p => p.id === l.propertyId),
-        tenant: tenants.find(t => t.id === l.tenantId),
-      };
+      return { ...l, days, level, prop: properties.find(p => p.id === l.propertyId), tenant: tenants.find(t => t.id === l.tenantId) };
     })
     .filter(Boolean)
     .sort((a, b) => a.days - b.days);
 
   const recentLeases = [...leases]
+    .filter(l => l.status === "activo")
     .sort((a, b) => new Date(b.startDate) - new Date(a.startDate))
     .slice(0, 4);
 
@@ -41,7 +28,7 @@ export function Dashboard({ properties, leases, tenants }) {
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Dashboard</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          {today.toLocaleDateString("es-AR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+          {new Date().toLocaleDateString("es-AR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
         </p>
       </div>
 
@@ -110,35 +97,36 @@ export function Dashboard({ properties, leases, tenants }) {
       {/* Contratos recientes */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5">
         <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-4">Contratos Activos Recientes</h3>
-        <div className="space-y-2">
-          {recentLeases.map(l => {
-            const prop   = properties.find(p => p.id === l.propertyId);
-            const tenant = tenants.find(t => t.id === l.tenantId);
-            const days   = diffDays(l.endDate);
-            const alert  = getAlertLevel(days);
-            return (
-              <div key={l.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
-                  <FileText size={14} className="text-blue-600 dark:text-blue-400" />
+        {recentLeases.length === 0 ? (
+          <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-6">Sin contratos activos</p>
+        ) : (
+          <div className="space-y-2">
+            {recentLeases.map(l => {
+              const prop   = properties.find(p => p.id === l.propertyId);
+              const tenant = tenants.find(t => t.id === l.tenantId);
+              const days   = diffDays(l.endDate);
+              const alert  = getAlertLevel(days);
+              return (
+                <div key={l.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                    <FileText size={14} className="text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{prop?.address}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500">{tenant?.name}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{fmtCurrency(l.rent)}</p>
+                    {alert
+                      ? <p className={`text-xs ${alert.color}`}>{fmtDuration(days)} restantes</p>
+                      : <p className="text-xs text-gray-400 dark:text-gray-500">Vence {fmtDate(l.endDate)}</p>
+                    }
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{prop?.address}</p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500">{tenant?.name}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{fmtCurrency(l.rent)}</p>
-                  {alert
-                    ? <p className={`text-xs ${alert.color}`}>{days <= 0 ? "Venció" : `${fmtDuration(days)} restantes`}</p>
-                    : <p className="text-xs text-gray-400 dark:text-gray-500">Vence {fmtDate(l.endDate)}</p>
-                  }
-                </div>
-              </div>
-            );
-          })}
-          {recentLeases.length === 0 && (
-            <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-4">Sin contratos recientes</p>
-          )}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

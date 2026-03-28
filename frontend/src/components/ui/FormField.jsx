@@ -1,5 +1,3 @@
-// ─── FIELD WRAPPER ───────────────────────────────────────────
-
 export function Field({ label, children, hint }) {
   return (
     <div className="space-y-1.5">
@@ -10,8 +8,6 @@ export function Field({ label, children, hint }) {
   );
 }
 
-// ─── INPUT ───────────────────────────────────────────────────
-
 export function Input({ ...props }) {
   return (
     <input
@@ -20,8 +16,6 @@ export function Input({ ...props }) {
     />
   );
 }
-
-// ─── SELECT ──────────────────────────────────────────────────
 
 export function Select({ children, ...props }) {
   return (

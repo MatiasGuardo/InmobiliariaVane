@@ -1,37 +1,110 @@
-// Componente principal de la aplicación
-
-import React, { useState } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Dashboard from "./pages/Dashboard.jsx";
-import Properties from "./pages/Properties.jsx";
-import Leases from "./pages/Leases.jsx";
-import Contacts from "./pages/Contacts.jsx";
+import { useMemo, useState, useEffect } from "react";
+import { Sidebar } from "./components/layout/Sidebar";
+import { Dashboard } from "./pages/Dashboard";
+import { Properties } from "./pages/Properties";
+import { Contacts } from "./pages/Contacts";
+import { Leases } from "./pages/Leases";
+import { Notifications } from "./pages/Notifications";
+import { ErrorBox } from "./components/ui/ErrorBox";
+import { useApi } from "./hooks/useApi";
+import { useTheme } from "./hooks/useTheme";
+import { diffDays, getAlertLevel } from "./utils/helpers";
 
 export default function App() {
-  // Datos de ejemplo
-  const [properties, setProperties] = useState([
-    { id: 1, address: "Calle Falsa 123", status: "ocupado", type: "Departamento", price: 50000, ownerId: 1 },
-    { id: 2, address: "Av. Siempre Viva 742", status: "vacante", type: "Casa", price: 80000, ownerId: 2 },
-  ]);
-  const [leases, setLeases] = useState([
-    { id: 1, propertyId: 1, tenantId: 1, startDate: "2024-01-01", endDate: "2025-01-01", rent: 50000, status: "activo" },
-  ]);
-  const [tenants, setTenants] = useState([
-    { id: 1, name: "Juan Pérez" },
-  ]);
-  const [owners, setOwners] = useState([
-    { id: 1, name: "Ana Dueña" },
-    { id: 2, name: "Carlos Propietario" },
-  ]);
+  const [active, setActive] = useState("dashboard");
+  const { dark, toggleDark } = useTheme();
 
+  const { data: properties, setData: setProperties, loading: lProps,   error: eProps,   reload: reloadProps }   = useApi("/api/properties");
+  const { data: owners,     setData: setOwners,     loading: lOwners,  error: eOwners,  reload: reloadOwners }  = useApi("/api/owners");
+  const { data: tenants,    setData: setTenants,    loading: lTenants, error: eTenants, reload: reloadTenants } = useApi("/api/tenants");
+  const { data: leases,     setData: setLeases,     loading: lLeases,  error: eLeases,  reload: reloadLeases }  = useApi("/api/leases");
+
+  const loading = lProps || lOwners || lTenants || lLeases;
+  const error   = eProps || eOwners || eTenants || eLeases;
+
+  // ── Badge de alertas ─────────────────────────────────────────
+  const alertCountRaw = useMemo(
+    () => leases.filter(l => l.status === "activo" && getAlertLevel(diffDays(l.endDate))).length,
+    [leases]
+  );
+
+  const [badgeDismissed, setBadgeDismissed] = useState(() => {
+    const lastSeen = localStorage.getItem("alertas_last_seen");
+    if (!lastSeen) return false;
+    return (Date.now() - Number(lastSeen)) < 24 * 60 * 60 * 1000;
+  });
+
+  useEffect(() => {
+    if (alertCountRaw > 0) {
+      const lastSeen = localStorage.getItem("alertas_last_seen");
+      if (!lastSeen || (Date.now() - Number(lastSeen)) >= 24 * 60 * 60 * 1000) {
+        setBadgeDismissed(false);
+      }
+    }
+  }, [alertCountRaw]);
+
+  const handleSetActive = (id) => {
+    setActive(id);
+    if (id === "notifications") {
+      setBadgeDismissed(true);
+      localStorage.setItem("alertas_last_seen", String(Date.now()));
+    }
+  };
+
+  const alertCount = badgeDismissed ? 0 : alertCountRaw;
+  const shared = { properties, setProperties, owners, setOwners, tenants, setTenants, leases, setLeases };
+
+  // ── Loading ──────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-center">
+          <div className="w-10 h-10 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin mx-auto" />
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-3">Cargando datos…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Error ────────────────────────────────────────────────────
+  if (error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900 p-8">
+        <div className="max-w-sm w-full space-y-4">
+          <ErrorBox
+            message={error}
+            onRetry={() => { reloadProps(); reloadOwners(); reloadTenants(); reloadLeases(); }}
+          />
+          <p className="text-xs text-gray-400 dark:text-gray-500 text-center">
+            Verificá que el servidor esté corriendo en{" "}
+            <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">
+              {import.meta.env.VITE_API_URL || "http://localhost:3001"}
+            </code>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── App ──────────────────────────────────────────────────────
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Dashboard properties={properties} leases={leases} tenants={tenants} />} />
-        <Route path="/propiedades" element={<Properties properties={properties} setProperties={setProperties} owners={owners} />} />
-        <Route path="/contratos" element={<Leases leases={leases} setLeases={setLeases} properties={properties} tenants={tenants} />} />
-        <Route path="/contactos" element={<Contacts owners={owners} setOwners={setOwners} tenants={tenants} setTenants={setTenants} properties={properties} leases={leases} />} />
-      </Routes>
-    </BrowserRouter>
+    <div className="flex min-h-screen bg-gray-50/80 dark:bg-gray-900 font-sans">
+      <Sidebar
+        active={active}
+        setActive={handleSetActive}
+        alertCount={alertCount}
+        dark={dark}
+        toggleDark={toggleDark}
+      />
+      <main className="flex-1 overflow-auto">
+        <div className="max-w-5xl mx-auto px-6 py-8">
+          {active === "dashboard"     && <Dashboard     {...shared} />}
+          {active === "properties"    && <Properties    {...shared} />}
+          {active === "contacts"      && <Contacts      {...shared} />}
+          {active === "leases"        && <Leases        {...shared} />}
+          {active === "notifications" && <Notifications {...shared} />}
+        </div>
+      </main>
+    </div>
   );
 }

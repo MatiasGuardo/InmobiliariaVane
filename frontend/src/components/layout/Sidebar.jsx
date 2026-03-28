@@ -52,9 +52,8 @@ export function Sidebar({ active, setActive, alertCount, dark, toggleDark }) {
         })}
       </nav>
 
-      {/* Footer: dark mode toggle + user */}
+      {/* Footer */}
       <div className="px-3 pb-4 border-t border-gray-100 dark:border-gray-700 pt-3 space-y-1">
-        {/* Toggle modo oscuro */}
         <button
           onClick={toggleDark}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
@@ -66,7 +65,6 @@ export function Sidebar({ active, setActive, alertCount, dark, toggleDark }) {
           {dark ? "Modo Claro" : "Modo Oscuro"}
         </button>
 
-        {/* Usuario */}
         <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer">
           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-xs font-bold">A</div>
           <div className="min-w-0">
