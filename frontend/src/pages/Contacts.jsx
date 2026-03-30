@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
   Edit2, Mail, Phone, Plus, Search, Trash2, Users,
-  X, MapPin, FileText, Building2, Calendar, User,
+  X, FileText, Building2, Calendar, User,
 } from "lucide-react";
 import { Modal }                from "../components/ui/Modal";
 import { Field, Input, Select } from "../components/ui/FormField";
@@ -19,8 +19,9 @@ function ContactDetailModal({ person, tab, properties, leases, onClose, onEdit, 
     : [];
 
   // Para inquilinos: su contrato activo
+  // Usamos String() para evitar mismatch de tipos entre number y string
   const activeLease = !isOwner
-    ? leases.find(l => l.id === person.leaseId && l.status === "activo")
+    ? leases.find(l => String(l.id) === String(person.leaseId) && l.status === "activo")
     : null;
 
   const headerBg = isOwner ? "bg-blue-600" : "bg-violet-600";
@@ -306,7 +307,7 @@ export function Contacts({ owners, setOwners, tenants, setTenants, properties, l
       <div className="grid gap-3">
         {list.map(person => {
           const personProps = tab === "owners" ? properties.filter(p => p.ownerId === person.id) : [];
-          const lease       = tab === "tenants" ? leases.find(l => l.id === person.leaseId) : null;
+          const lease       = tab === "tenants" ? leases.find(l => String(l.id) === String(person.leaseId)) : null;
           return (
             <div
               key={person.id}
@@ -370,12 +371,17 @@ export function Contacts({ owners, setOwners, tenants, setTenants, properties, l
       {/* Modal crear/editar */}
       <Modal open={modal} onClose={() => { setModal(false); setEditing(null); }} title={editing ? "Editar Contacto" : "Nuevo Contacto"}>
         <div className="space-y-4">
-          <Field label="Rol">
-            <Select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} disabled={!!editing}>
-              <option value="owner">Propietario</option>
-              <option value="tenant">Inquilino</option>
-            </Select>
-          </Field>
+
+          {/* Rol: solo visible al crear, no al editar */}
+          {!editing && (
+            <Field label="Rol">
+              <Select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}>
+                <option value="owner">Propietario</option>
+                <option value="tenant">Inquilino</option>
+              </Select>
+            </Field>
+          )}
+
           <Field label="Nombre completo">
             <Input placeholder="Ej: Juan Pérez" value={form.name} onChange={e => { setForm({ ...form, name: e.target.value }); setFormError(""); }} />
           </Field>
@@ -385,6 +391,7 @@ export function Contacts({ owners, setOwners, tenants, setTenants, properties, l
           <Field label="Teléfono" hint="Opcional">
             <Input placeholder="+54 11 1234-5678" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
           </Field>
+
           {formError && (
             <div className="flex items-start gap-2.5 p-3.5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-red-500 flex-shrink-0 mt-0.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>

@@ -71,14 +71,47 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// DELETE /api/properties/:id (baja lógica)
+// DELETE /api/properties/:id
+// Cascada: contratos → documentos de contratos → documentos de propiedad → propiedad
 router.delete("/:id", async (req, res) => {
+  const conn = await pool.getConnection();
   try {
-    await pool.query("UPDATE propiedades SET activo = 0 WHERE id = ?", [req.params.id]);
+    await conn.beginTransaction();
+
+    // 1. Obtener todos los contratos de la propiedad
+    const [contratos] = await conn.query(
+      "SELECT id FROM contratos WHERE propiedad_id = ?",
+      [req.params.id]
+    );
+
+    for (const contrato of contratos) {
+      // 2. Eliminar documentos de cada contrato
+      await conn.query(
+        "DELETE FROM documentos WHERE entity_type = 'lease' AND entity_id = ?",
+        [contrato.id]
+      );
+    }
+
+    // 3. Eliminar todos los contratos de la propiedad
+    await conn.query("DELETE FROM contratos WHERE propiedad_id = ?", [req.params.id]);
+
+    // 4. Eliminar documentos de la propiedad
+    await conn.query(
+      "DELETE FROM documentos WHERE entity_type = 'property' AND entity_id = ?",
+      [req.params.id]
+    );
+
+    // 5. Dar de baja la propiedad
+    await conn.query("UPDATE propiedades SET activo = 0 WHERE id = ?", [req.params.id]);
+
+    await conn.commit();
     res.json({ ok: true });
   } catch (err) {
+    await conn.rollback();
     console.error(err);
     res.status(500).json({ error: "Error al eliminar propiedad" });
+  } finally {
+    conn.release();
   }
 });
 
