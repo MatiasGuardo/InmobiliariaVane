@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertTriangle, Calendar, CheckCircle, Edit2, FileText, Percent, Plus, RefreshCw, Search, Trash2, Calculator, X } from "lucide-react";
+import { AlertTriangle, Calendar, CheckCircle, Edit2, FileText, Percent, Plus, RefreshCw, Search, Trash2, Calculator, X, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Modal }              from "../components/ui/Modal";
 import { Field, Input, Select } from "../components/ui/FormField";
 import { Badge }              from "../components/ui/Badge";
@@ -10,6 +10,46 @@ const PERIODS = [
   { value: "semestral",  label: "Semestral",  months: 6  },
   { value: "anual",      label: "Anual",      months: 12 },
 ];
+
+const SORT_OPTIONS = [
+  { value: "vencimiento_asc",  label: "Vencimiento ↑" },
+  { value: "vencimiento_desc", label: "Vencimiento ↓" },
+  { value: "precio_asc",       label: "Precio ↑"      },
+  { value: "precio_desc",      label: "Precio ↓"      },
+  { value: "inicio_asc",       label: "Más antiguo"   },
+  { value: "inicio_desc",      label: "Más reciente"  },
+];
+
+// ─── Estilos de alerta mejorados para dark mode ───────────────
+// En lugar de bordes intensos, usamos un acento sutil en el lado izquierdo
+// y un fondo muy leve, más elegante en dark mode
+function getAlertStyles(alert) {
+  if (!alert) return {
+    card: "border border-gray-100 dark:border-gray-700/60",
+    bar:  "bg-blue-500",
+    leftAccent: "",
+  };
+
+  const styles = {
+    Crítico: {
+      card: "border border-red-200/70 dark:border-gray-700/60 dark:shadow-[inset_3px_0_0_0_rgba(239,68,68,0.6)]",
+      bar:  "bg-red-500",
+      dot:  "bg-red-500",
+    },
+    Urgente: {
+      card: "border border-orange-200/70 dark:border-gray-700/60 dark:shadow-[inset_3px_0_0_0_rgba(249,115,22,0.6)]",
+      bar:  "bg-orange-400",
+      dot:  "bg-orange-400",
+    },
+    Próximo: {
+      card: "border border-amber-200/70 dark:border-gray-700/60 dark:shadow-[inset_3px_0_0_0_rgba(251,191,36,0.5)]",
+      bar:  "bg-amber-400",
+      dot:  "bg-amber-400",
+    },
+  };
+
+  return styles[alert.label] || styles["Próximo"];
+}
 
 // ─── Calculadora de ajuste ─────────────────────────────────────
 function RentCalculator({ lease, onClose }) {
@@ -175,10 +215,32 @@ function validateRenewForm(form) {
   return null;
 }
 
+// ─── Función de ordenamiento ──────────────────────────────────
+function applySorting(list, sortKey) {
+  const sorted = [...list];
+  switch (sortKey) {
+    case "vencimiento_asc":
+      return sorted.sort((a, b) => new Date(a.endDate) - new Date(b.endDate));
+    case "vencimiento_desc":
+      return sorted.sort((a, b) => new Date(b.endDate) - new Date(a.endDate));
+    case "precio_asc":
+      return sorted.sort((a, b) => a.rent - b.rent);
+    case "precio_desc":
+      return sorted.sort((a, b) => b.rent - a.rent);
+    case "inicio_asc":
+      return sorted.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+    case "inicio_desc":
+      return sorted.sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
+    default:
+      return sorted;
+  }
+}
+
 // ─── Leases ───────────────────────────────────────────────────
 export function Leases({ leases, setLeases, properties, tenants, initialTab = "activo" }) {
   const [tab,         setTab]         = useState(initialTab === "activo" ? "activo" : "finalizado");
   const [search,      setSearch]      = useState("");
+  const [sortKey,     setSortKey]     = useState("vencimiento_asc");
   const [modal,       setModal]       = useState(false);
   const [renewModal,  setRenewModal]  = useState(false);
   const [saving,      setSaving]      = useState(false);
@@ -195,9 +257,8 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
     tenantId: "", startDate: "", endDate: "", rent: "", increase: "6", period: "anual",
   });
 
-  const activos     = [...leases].filter(l => l.status === "activo").sort((a, b) => diffDays(a.endDate) - diffDays(b.endDate));
-  // Finalizados: todos los no-activos EXCEPTO "renovado" (esos se eliminan al renovar)
-  const finalizados = [...leases].filter(l => l.status !== "activo" && l.status !== "renovado").sort((a, b) => new Date(b.endDate) - new Date(a.endDate));
+  const activos     = [...leases].filter(l => l.status === "activo");
+  const finalizados = [...leases].filter(l => l.status !== "activo" && l.status !== "renovado");
 
   const filterFn = (l) => {
     if (!search) return true;
@@ -207,7 +268,9 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
     return prop?.address?.toLowerCase().includes(q) || ten?.name?.toLowerCase().includes(q);
   };
 
-  const currentList = (tab === "activo" ? activos : finalizados).filter(filterFn);
+  const baseList    = tab === "activo" ? activos : finalizados;
+  const filtered    = baseList.filter(filterFn);
+  const currentList = applySorting(filtered, sortKey);
 
   const openNew = () => {
     setEditing(null);
@@ -229,8 +292,6 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
 
   const openRenew = (l) => {
     setRenewTarget(l);
-    // Para contratos vencidos, la nueva fecha de inicio es hoy
-    // Para contratos activos, la nueva fecha de inicio es el día siguiente al fin
     const isVencido = l.status === "vencido";
     let nextStart;
     if (isVencido) {
@@ -268,19 +329,14 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
     finally { setSaving(false); setEditing(null); }
   };
 
-  // Al renovar: eliminamos el contrato anterior (no lo marcamos como renovado)
-  // y creamos uno nuevo activo. Si el anterior era activo, el backend libera
-  // la propiedad al eliminarlo y la vuelve a marcar al crear el nuevo.
   const confirmRenew = async () => {
     const err = validateRenewForm(renewForm);
     if (err) { setRenewError(err); return; }
     setSaving(true); setRenewError("");
     try {
-      // 1. Eliminar el contrato anterior
       const delRes = await fetch(`${API}/api/leases/${renewTarget.id}`, { method: "DELETE" });
       if (!delRes.ok) throw new Error(await delRes.text());
 
-      // 2. Crear el nuevo contrato activo
       const res = await fetch(`${API}/api/leases`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -296,7 +352,6 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
       if (!res.ok) throw new Error(await res.text());
       const newLease = await res.json();
 
-      // 3. Quitar el anterior del estado local y agregar el nuevo
       setLeases(prev => [...prev.filter(l => l.id !== renewTarget.id), newLease]);
       setRenewModal(false);
       setRenewTarget(null);
@@ -318,21 +373,26 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
     const tenant  = tenants.find(t => t.id === l.tenantId);
     const days    = diffDays(l.endDate);
     const alert   = l.status === "activo" ? getAlertLevel(days) : null;
+    const styles  = getAlertStyles(alert);
     const progress = Math.min(100, Math.max(0,
       ((new Date() - new Date(l.startDate)) / (new Date(l.endDate) - new Date(l.startDate))) * 100
     ));
     const periodLabel = PERIODS.find(p => p.value === l.period)?.label || "Anual";
     const isCalcOpen  = calcOpen === l.id;
-
-    // Puede renovar si está activo O si está vencido
     const canRenew = l.status === "activo" || l.status === "vencido";
 
     return (
-      <div className={`bg-white dark:bg-gray-800 rounded-2xl border p-5 transition-all hover:shadow-md ${alert ? alert.border : "border-gray-100 dark:border-gray-700"}`}>
+      <div className={`bg-white dark:bg-gray-800 rounded-2xl ${styles.card} p-5 transition-all hover:shadow-md`}>
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-4 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
-              <FileText size={16} className="text-blue-600 dark:text-blue-400" />
+            {/* Ícono con dot de color según alerta */}
+            <div className="relative flex-shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
+                <FileText size={16} className="text-blue-600 dark:text-blue-400" />
+              </div>
+              {alert && (
+                <span className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-gray-800 ${styles.dot}`} />
+              )}
             </div>
             <div className="min-w-0">
               <p className="font-semibold text-gray-800 dark:text-gray-200 truncate">{prop?.address}</p>
@@ -392,7 +452,7 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
             </div>
             <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all duration-700 ${alert ? (days <= 15 ? "bg-red-500" : days <= 30 ? "bg-orange-400" : "bg-amber-400") : "bg-blue-500"}`}
+                className={`h-full rounded-full transition-all duration-700 ${styles.bar || "bg-blue-500"}`}
                 style={{ width: `${progress}%` }}
               />
             </div>
@@ -432,7 +492,7 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
         ].map(({ key, label, count }) => (
           <button
             key={key}
-            onClick={() => { setTab(key); setSearch(""); setCalcOpen(null); }}
+            onClick={() => { setTab(key); setSearch(""); setCalcOpen(null); setSortKey("vencimiento_asc"); }}
             className={`flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-lg transition-all ${
               tab === key
                 ? "bg-blue-600 text-white"
@@ -453,15 +513,36 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
         ))}
       </div>
 
-      {/* Buscador */}
-      <div className="relative">
-        <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder={`Buscar en contratos ${tab === "activo" ? "activos" : "finalizados"}…`}
-          className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 outline-none transition-all placeholder:text-gray-400"
-        />
+      {/* Buscador + Ordenamiento */}
+      <div className="flex gap-3">
+        <div className="relative flex-1">
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder={`Buscar en contratos ${tab === "activo" ? "activos" : "finalizados"}…`}
+            className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 outline-none transition-all placeholder:text-gray-400"
+          />
+        </div>
+
+        {/* Selector de ordenamiento */}
+        <div className="relative">
+          <select
+            value={sortKey}
+            onChange={e => setSortKey(e.target.value)}
+            className="appearance-none pl-9 pr-8 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 outline-none transition-all cursor-pointer"
+          >
+            {SORT_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+          <ArrowUpDown size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 pointer-events-none" />
+          <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+            <svg width="10" height="6" viewBox="0 0 10 6" fill="none" className="text-gray-400">
+              <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+        </div>
       </div>
 
       {/* Lista */}
@@ -555,7 +636,6 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
       <Modal open={renewModal} onClose={() => { setRenewModal(false); setRenewTarget(null); }} title="Renovar Contrato" wide>
         {renewTarget && (
           <div className="space-y-4">
-            {/* Resumen contrato anterior */}
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-xl p-4">
               <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1">Contrato a reemplazar</p>
               <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
