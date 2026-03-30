@@ -1,136 +1,388 @@
-// ============================================================
-//  backend/mappers.js  —  VERSIÓN ACTUALIZADA
-//  Cambios respecto al original:
-//    • mapLease soporta tipo_ajuste ICL/IPC/FIJO
-//    • Se elimina parseIndiceAjuste (movida a rentCalc.js como parseLegacyIndiceAjuste)
-//    • Se agregan proxima_actualizacion, tipo_ajuste, indice_base* al shape del lease
-// ============================================================
-
-// ─── MAPPERS: transforman filas de la BD al formato del frontend ─────────────
-
 import { Router } from "express";
+import { pool }    from "../db.js";
+import { mapLease } from "../mappers.js";
+
 const router = Router();
 
-export function mapOwner(row) {
-  return {
-    id:         String(row.id),
-    name:       `${row.nombre} ${row.apellido}`,
-    email:      row.email,
-    phone:      row.telefono || "",
-    properties: row.properties ? row.properties.split(",").map(String) : [],
-  };
+// ─── Helpers ─────────────────────────────────────────────────
+
+// Construye el string legado para compatibilidad con registros FIJO viejos
+function buildIndiceAjuste(increase, period) {
+  if (!increase) return null;
+  const p = ["trimestral", "semestral", "anual"].includes(period) ? period : "anual";
+  return `${increase}% ${p}`;
 }
 
-export function mapTenant(row) {
-  return {
-    id:      String(row.id),
-    name:    `${row.nombre} ${row.apellido}`,
-    email:   row.email,
-    phone:   row.telefono || "",
-    leaseId: row.leaseId ? String(row.leaseId) : null,
-  };
+// Obtiene el valor más reciente del índice <= fecha dada
+async function getIndiceBase(conn, tipo, fecha) {
+  const primerDia = fecha.slice(0, 7) + "-01";
+  const [rows] = await conn.query(
+    `SELECT valor FROM indices_historicos
+     WHERE tipo = ? AND periodo <= ?
+     ORDER BY periodo DESC LIMIT 1`,
+    [tipo, primerDia]
+  );
+  return rows.length ? parseFloat(rows[0].valor) : null;
 }
 
-export function mapProperty(row) {
-  return {
-    id:      String(row.id),
-    address: `${row.direccion}${row.numero ? ", " + row.numero : ""}`,
-    type:    mapTipo(row.tipo),
-    price:   Number(row.precio_lista),
-    status:  row.estado === "alquilada" ? "ocupado" : "vacante",
-    ownerId: String(row.id_propietario),
-    leaseId: row.leaseId ? String(row.leaseId) : null,
-  };
+// Calcula la próxima fecha de actualización a partir de una fecha base
+function calcProximaActualizacion(fechaInicio, periodo) {
+  const months = { trimestral: 3, semestral: 6, anual: 12 }[periodo] ?? 12;
+  const d = new Date(fechaInicio);
+  d.setMonth(d.getMonth() + months);
+  return d.toISOString().split("T")[0];
 }
 
-// ─── mapLease — soporta FIJO | ICL | IPC ─────────────────────
-export function mapLease(row) {
-  // ── Compatibilidad con filas viejas que solo tenían indice_ajuste (string) ──
-  // Si la columna nueva tipo_ajuste no existe aún (filas legacy), inferimos FIJO
-  const tipoAjuste = row.tipo_ajuste ?? "FIJO";
-
-  // Para tipo FIJO usamos porcentaje_ajuste o caemos al legado
-  let increase = Number(row.porcentaje_ajuste ?? 0);
-  let period   = row.periodo_ajuste ?? "anual";
-
-  // Fallback: parseo del string legado "10% trimestral" si las nuevas columnas son null
-  if (tipoAjuste === "FIJO" && !row.porcentaje_ajuste && row.indice_ajuste) {
-    const match = String(row.indice_ajuste).match(/^([\d.]+)%?\s*(trimestral|semestral|anual)?/i);
-    if (match) {
-      increase = Number(match[1]) || 6;
-      period   = (match[2] || "anual").toLowerCase();
-    }
+// ─── GET /api/leases ──────────────────────────────────────────
+router.get("/", async (_req, res) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT * FROM contratos
+      WHERE estado_contrato NOT IN ('borrador')
+      ORDER BY fecha_fin ASC
+    `);
+    res.json(rows.map(mapLease));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al obtener contratos" });
   }
+});
 
-  return {
-    id:         String(row.id),
-    propertyId: String(row.propiedad_id),
-    tenantId:   String(row.inquilino_id),
-    startDate:  _fmtDate(row.fecha_inicio),
-    endDate:    _fmtDate(row.fecha_fin),
-    rent:       Number(row.monto_renta),
+// ─── POST /api/leases ─────────────────────────────────────────
+router.post("/", async (req, res) => {
+  const {
+    propertyId, tenantId, startDate, endDate, rent,
+    // Ajuste
+    tipoAjuste = "FIJO",   // "FIJO" | "ICL" | "IPC"
+    increase,              // solo para FIJO
+    period = "anual",      // trimestral | semestral | anual
+  } = req.body;
 
-    // ── Ajuste ──
-    tipoAjuste,                                        // "FIJO" | "ICL" | "IPC"
-    increase,                                          // solo relevante para FIJO
-    period,                                            // trimestral | semestral | anual
+  if (!propertyId || !tenantId || !startDate || !endDate || !rent)
+    return res.status(400).json({ error: "Faltan campos obligatorios" });
 
-    // ── Índice base (snapshot al firmar) ──
-    indiceBaseFecha: row.indice_base_fecha
-      ? _fmtDate(row.indice_base_fecha)
-      : null,
-    indiceBaseValor: row.indice_base_valor
-      ? parseFloat(row.indice_base_valor)
-      : null,
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [[prop]] = await conn.query(
+      "SELECT id_propietario FROM propiedades WHERE id = ?", [propertyId]
+    );
+    if (!prop) throw new Error("Propiedad no encontrada");
+
+    // ── Índice base para ICL/IPC ──
+    let indiceBaseValor = null;
+    let indiceBaseFecha = null;
+    if (tipoAjuste === "ICL" || tipoAjuste === "IPC") {
+      indiceBaseValor = await getIndiceBase(conn, tipoAjuste, startDate);
+      if (!indiceBaseValor) throw new Error(
+        `No se encontró valor de ${tipoAjuste} para la fecha ${startDate}. ` +
+        `Verificá que haya datos en indices_historicos.`
+      );
+      indiceBaseFecha = startDate.slice(0, 7) + "-01";
+    }
 
     // ── Próxima actualización ──
-    proximaActualizacion: row.proxima_actualizacion
-      ? _fmtDate(row.proxima_actualizacion)
-      : null,
+    const proximaActualizacion = calcProximaActualizacion(startDate, period);
 
-    status: row.estado_contrato === "activo" ? "activo" : row.estado_contrato,
-  };
-}
+    // ── String legado (compatibilidad) ──
+    const indiceAjuste = tipoAjuste === "FIJO"
+      ? buildIndiceAjuste(increase, period)
+      : null;
 
-// ─── Helpers privados ─────────────────────────────────────────
-function _fmtDate(value) {
-  if (!value) return null;
-  if (value instanceof Date) return value.toISOString().split("T")[0];
-  return String(value).slice(0, 10); // "YYYY-MM-DD HH:MM:SS" → "YYYY-MM-DD"
-}
+    // ── Columnas nuevas (si existen en la BD) ──
+    // Intentamos escribir en tipo_ajuste / periodo_ajuste / porcentaje_ajuste
+    // Si las columnas no existen, caemos al modo legado graciosamente
+    let insertQuery;
+    let insertParams;
 
-// ─── Traduce tipo del frontend al ENUM de la BD ───────────────
-export function mapTipoDB(tipo) {
-  const m = {
-    "Departamento":    "departamento",
-    "Local Comercial": "local_comercial",
-    "Casa":            "casa",
-    "Oficina":         "oficina",
-    "Galpón":          "galpon",
-    "Terreno":         "terreno",
-  };
-  return m[tipo] || "otro";
-}
+    try {
+      // Verificar si existen las columnas nuevas
+      const [[colCheck]] = await conn.query(
+        `SELECT COUNT(*) AS cnt FROM information_schema.columns
+         WHERE table_schema = DATABASE()
+           AND table_name = 'contratos'
+           AND column_name = 'tipo_ajuste'`
+      );
+      const hasNewCols = colCheck.cnt > 0;
 
-// ─── Traduce tipo de la BD al formato del frontend ───────────
-export function mapTipo(tipo) {
-  const m = {
-    departamento:    "Departamento",
-    local_comercial: "Local Comercial",
-    casa:            "Casa",
-    oficina:         "Oficina",
-    galpon:          "Galpón",
-    terreno:         "Terreno",
-    otro:            "Otro",
-  };
-  return m[tipo] || tipo;
-}
+      if (hasNewCols) {
+        insertQuery = `
+          INSERT INTO contratos
+            (propiedad_id, inquilino_id, propietario_id, fecha_inicio, fecha_fin,
+             monto_renta, moneda, estado_contrato,
+             indice_ajuste,
+             tipo_ajuste, periodo_ajuste, porcentaje_ajuste,
+             indice_base_fecha, indice_base_valor, proxima_actualizacion)
+          VALUES (?, ?, ?, ?, ?, ?, 'ARS', 'activo', ?, ?, ?, ?, ?, ?, ?)`;
+        insertParams = [
+          propertyId, tenantId, prop.id_propietario,
+          startDate, endDate, rent,
+          indiceAjuste,
+          tipoAjuste, period,
+          tipoAjuste === "FIJO" ? (Number(increase) || 0) : null,
+          indiceBaseFecha, indiceBaseValor, proximaActualizacion,
+        ];
+      } else {
+        // Fallback: solo columnas legacy
+        insertQuery = `
+          INSERT INTO contratos
+            (propiedad_id, inquilino_id, propietario_id, fecha_inicio, fecha_fin,
+             monto_renta, moneda, estado_contrato, indice_ajuste)
+          VALUES (?, ?, ?, ?, ?, ?, 'ARS', 'activo', ?)`;
+        insertParams = [
+          propertyId, tenantId, prop.id_propietario,
+          startDate, endDate, rent, indiceAjuste,
+        ];
+      }
+    } catch {
+      insertQuery = `
+        INSERT INTO contratos
+          (propiedad_id, inquilino_id, propietario_id, fecha_inicio, fecha_fin,
+           monto_renta, moneda, estado_contrato, indice_ajuste)
+        VALUES (?, ?, ?, ?, ?, ?, 'ARS', 'activo', ?)`;
+      insertParams = [
+        propertyId, tenantId, prop.id_propietario,
+        startDate, endDate, rent, indiceAjuste,
+      ];
+    }
 
-// ─── Descompone un nombre completo en nombre + apellido ───────
-export function splitName(fullName) {
-  const parts    = fullName.trim().split(" ");
-  const apellido = parts.length > 1 ? parts.at(-1) : "";
-  const nombre   = parts.length > 1 ? parts.slice(0, -1).join(" ") : parts[0];
-  return { nombre, apellido };
-}
+    const [result] = await conn.query(insertQuery, insertParams);
+
+    await conn.query(
+      "UPDATE propiedades SET estado = 'alquilada' WHERE id = ?", [propertyId]
+    );
+
+    await conn.commit();
+
+    const resolvedPeriod = ["trimestral", "semestral", "anual"].includes(period) ? period : "anual";
+
+    res.status(201).json({
+      id:         String(result.insertId),
+      propertyId: String(propertyId),
+      tenantId:   String(tenantId),
+      startDate, endDate,
+      rent:     Number(rent),
+      tipoAjuste,
+      increase: tipoAjuste === "FIJO" ? (Number(increase) || 6) : 0,
+      period:   resolvedPeriod,
+      indiceBaseValor,
+      indiceBaseFecha,
+      proximaActualizacion,
+      status: "activo",
+    });
+  } catch (err) {
+    await conn.rollback();
+    console.error(err);
+    res.status(500).json({ error: err.message || "Error al crear contrato" });
+  } finally {
+    conn.release();
+  }
+});
+
+// ─── PUT /api/leases/:id ──────────────────────────────────────
+router.put("/:id", async (req, res) => {
+  const { id } = req.params;
+  const {
+    propertyId, tenantId, startDate, endDate, rent,
+    tipoAjuste = "FIJO",
+    increase,
+    period = "anual",
+    status,
+  } = req.body;
+
+  if (!propertyId || !tenantId || !startDate || !endDate || !rent)
+    return res.status(400).json({ error: "Faltan campos obligatorios" });
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [[prop]] = await conn.query(
+      "SELECT id_propietario FROM propiedades WHERE id = ?", [propertyId]
+    );
+    if (!prop) throw new Error("Propiedad no encontrada");
+
+    let indiceBaseValor = null;
+    let indiceBaseFecha = null;
+    if (tipoAjuste === "ICL" || tipoAjuste === "IPC") {
+      indiceBaseValor = await getIndiceBase(conn, tipoAjuste, startDate);
+      if (!indiceBaseValor) throw new Error(
+        `No se encontró valor de ${tipoAjuste} para la fecha ${startDate}.`
+      );
+      indiceBaseFecha = startDate.slice(0, 7) + "-01";
+    }
+
+    const proximaActualizacion = calcProximaActualizacion(startDate, period);
+    const indiceAjuste = tipoAjuste === "FIJO" ? buildIndiceAjuste(increase, period) : null;
+
+    try {
+      const [[colCheck]] = await conn.query(
+        `SELECT COUNT(*) AS cnt FROM information_schema.columns
+         WHERE table_schema = DATABASE()
+           AND table_name = 'contratos'
+           AND column_name = 'tipo_ajuste'`
+      );
+      const hasNewCols = colCheck.cnt > 0;
+
+      if (hasNewCols) {
+        await conn.query(
+          `UPDATE contratos SET
+             propiedad_id = ?, inquilino_id = ?, propietario_id = ?,
+             fecha_inicio = ?, fecha_fin = ?, monto_renta = ?,
+             indice_ajuste = ?,
+             tipo_ajuste = ?, periodo_ajuste = ?, porcentaje_ajuste = ?,
+             indice_base_fecha = ?, indice_base_valor = ?,
+             proxima_actualizacion = ?,
+             estado_contrato = ?
+           WHERE id = ?`,
+          [
+            propertyId, tenantId, prop.id_propietario,
+            startDate, endDate, rent,
+            indiceAjuste,
+            tipoAjuste, period,
+            tipoAjuste === "FIJO" ? (Number(increase) || 0) : null,
+            indiceBaseFecha, indiceBaseValor,
+            proximaActualizacion,
+            status || "activo",
+            id,
+          ]
+        );
+      } else {
+        await conn.query(
+          `UPDATE contratos SET
+             propiedad_id = ?, inquilino_id = ?, propietario_id = ?,
+             fecha_inicio = ?, fecha_fin = ?, monto_renta = ?,
+             indice_ajuste = ?, estado_contrato = ?
+           WHERE id = ?`,
+          [propertyId, tenantId, prop.id_propietario, startDate, endDate, rent,
+           indiceAjuste, status || "activo", id]
+        );
+      }
+    } catch {
+      await conn.query(
+        `UPDATE contratos SET
+           propiedad_id = ?, inquilino_id = ?, propietario_id = ?,
+           fecha_inicio = ?, fecha_fin = ?, monto_renta = ?,
+           indice_ajuste = ?, estado_contrato = ?
+         WHERE id = ?`,
+        [propertyId, tenantId, prop.id_propietario, startDate, endDate, rent,
+         indiceAjuste, status || "activo", id]
+      );
+    }
+
+    await conn.commit();
+    const [[row]] = await pool.query("SELECT * FROM contratos WHERE id = ?", [id]);
+    res.json(mapLease(row));
+  } catch (err) {
+    await conn.rollback();
+    console.error(err);
+    res.status(500).json({ error: err.message || "Error al actualizar contrato" });
+  } finally {
+    conn.release();
+  }
+});
+
+// ─── DELETE /api/leases/:id ───────────────────────────────────
+router.delete("/:id", async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [[lease]] = await conn.query(
+      "SELECT propiedad_id FROM contratos WHERE id = ?", [req.params.id]
+    );
+    if (!lease) {
+      await conn.rollback();
+      return res.status(404).json({ error: "Contrato no encontrado" });
+    }
+
+    await conn.query("DELETE FROM contratos WHERE id = ?", [req.params.id]);
+
+    const [[otro]] = await conn.query(
+      "SELECT id FROM contratos WHERE propiedad_id = ? AND estado_contrato = 'activo' LIMIT 1",
+      [lease.propiedad_id]
+    );
+    if (!otro) {
+      await conn.query(
+        "UPDATE propiedades SET estado = 'disponible' WHERE id = ?", [lease.propiedad_id]
+      );
+    }
+
+    await conn.commit();
+    res.json({ ok: true });
+  } catch (err) {
+    await conn.rollback();
+    console.error(err);
+    res.status(500).json({ error: "Error al eliminar contrato" });
+  } finally {
+    conn.release();
+  }
+});
+
+// ─── PATCH /api/leases/:id/status ────────────────────────────
+router.patch("/:id/status", async (req, res) => {
+  const { status } = req.body;
+  const valid = ["activo", "vencido", "rescindido", "renovado"];
+  if (!valid.includes(status))
+    return res.status(400).json({ error: "Estado inválido" });
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.query(
+      "UPDATE contratos SET estado_contrato = ? WHERE id = ?", [status, req.params.id]
+    );
+    if (status !== "activo") {
+      const [[lease]] = await conn.query(
+        "SELECT propiedad_id FROM contratos WHERE id = ?", [req.params.id]
+      );
+      if (lease) {
+        const [[otro]] = await conn.query(
+          "SELECT id FROM contratos WHERE propiedad_id = ? AND estado_contrato = 'activo' LIMIT 1",
+          [lease.propiedad_id]
+        );
+        if (!otro) {
+          await conn.query(
+            "UPDATE propiedades SET estado = 'disponible' WHERE id = ?", [lease.propiedad_id]
+          );
+        }
+      }
+    }
+    await conn.commit();
+    res.json({ ok: true });
+  } catch (err) {
+    await conn.rollback();
+    console.error(err);
+    res.status(500).json({ error: "Error al actualizar estado del contrato" });
+  } finally {
+    conn.release();
+  }
+});
+
+// ─── GET /api/leases/indices/:tipo ───────────────────────────
+// Devuelve los últimos 12 registros del índice para mostrar en el frontend
+router.get("/indices/:tipo", async (req, res) => {
+  const tipo = req.params.tipo.toUpperCase();
+  if (!["ICL", "IPC"].includes(tipo))
+    return res.status(400).json({ error: "Tipo inválido. Usar ICL o IPC." });
+  try {
+    const [rows] = await pool.query(
+      `SELECT periodo, valor FROM indices_historicos
+       WHERE tipo = ?
+       ORDER BY periodo DESC LIMIT 12`,
+      [tipo]
+    );
+    res.json(rows.map(r => ({
+      periodo: r.periodo instanceof Date
+        ? r.periodo.toISOString().split("T")[0]
+        : String(r.periodo).slice(0, 10),
+      valor: parseFloat(r.valor),
+    })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al obtener índices" });
+  }
+});
+
 export default router;
