@@ -12,6 +12,7 @@ import propertiesRouter from "./routes/properties.js";
 import ownersRouter     from "./routes/owners.js";
 import tenantsRouter    from "./routes/tenants.js";
 import leasesRouter     from "./routes/leases.js";
+import documentsRouter  from "./routes/documents.js";
 
 // Inicializa la conexión a la BD (el pool se conecta al importar)
 import "./db.js";
@@ -34,7 +35,8 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use(express.json());
+// Aumentar límite para base64 de archivos (max ~14MB base64 → 10MB archivo)
+app.use(express.json({ limit: "20mb" }));
 
 // ─── RUTAS ───────────────────────────────────────────────────
 
@@ -42,6 +44,7 @@ app.use("/api/properties", propertiesRouter);
 app.use("/api/owners",     ownersRouter);
 app.use("/api/tenants",    tenantsRouter);
 app.use("/api/leases",     leasesRouter);
+app.use("/api/documents",  documentsRouter);
 
 // Health check
 app.get("/api/health", (_req, res) => res.json({ status: "ok", ts: new Date() }));

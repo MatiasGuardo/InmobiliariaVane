@@ -1,17 +1,186 @@
 import { useState } from "react";
-import { Edit2, Mail, Phone, Plus, Search, Trash2, Users } from "lucide-react";
-import { Modal }              from "../components/ui/Modal";
+import {
+  Edit2, Mail, Phone, Plus, Search, Trash2, Users,
+  X, MapPin, FileText, Building2, Calendar, User,
+} from "lucide-react";
+import { Modal }                from "../components/ui/Modal";
 import { Field, Input, Select } from "../components/ui/FormField";
-import { fmtDate, API }      from "../utils/helpers";
+import { fmtDate, API }         from "../utils/helpers";
+
+// ─── Modal de detalle de contacto ────────────────────────────
+function ContactDetailModal({ person, tab, properties, leases, onClose, onEdit, onDelete }) {
+  if (!person) return null;
+
+  const isOwner = tab === "owners";
+
+  // Para propietarios: sus propiedades
+  const personProps = isOwner
+    ? properties.filter(p => p.ownerId === person.id)
+    : [];
+
+  // Para inquilinos: su contrato activo
+  const activeLease = !isOwner
+    ? leases.find(l => l.id === person.leaseId && l.status === "activo")
+    : null;
+
+  const headerBg = isOwner ? "bg-blue-600" : "bg-violet-600";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div
+        className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto border border-gray-100 dark:border-gray-700"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className={`${headerBg} px-6 py-5 rounded-t-2xl`}>
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3 min-w-0 pr-3">
+              <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
+                {person.name.charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="text-white/70 text-xs font-medium mb-0.5">
+                  {isOwner ? "Propietario" : "Inquilino"}
+                </p>
+                <p className="text-white font-bold text-base leading-snug truncate">{person.name}</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 transition-colors flex-shrink-0">
+              <X size={15} className="text-white" />
+            </button>
+          </div>
+        </div>
+
+        {/* Cuerpo */}
+        <div className="p-6 space-y-5">
+
+          {/* Datos de contacto */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+              <User size={11} /> Datos de contacto
+            </p>
+            <div className="flex flex-col gap-2">
+              <span className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                <Mail size={14} className="text-gray-400 flex-shrink-0" />
+                <a href={`mailto:${person.email}`} className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                  {person.email}
+                </a>
+              </span>
+              {person.phone && (
+                <span className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                  <Phone size={14} className="text-gray-400 flex-shrink-0" />
+                  <a href={`tel:${person.phone}`} className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                    {person.phone}
+                  </a>
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Propiedades del propietario */}
+          {isOwner && (
+            <>
+              <div className="h-px bg-gray-100 dark:bg-gray-800" />
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                  <Building2 size={11} /> Propiedades ({personProps.length})
+                </p>
+                {personProps.length > 0 ? (
+                  <div className="space-y-2">
+                    {personProps.map(prop => (
+                      <div key={prop.id} className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
+                        <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                          <Building2 size={13} className="text-blue-600 dark:text-blue-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{prop.address}</p>
+                          <p className="text-xs text-gray-400 dark:text-gray-500">{prop.type}</p>
+                        </div>
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${
+                          prop.status === "ocupado"
+                            ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400"
+                            : "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
+                        }`}>
+                          {prop.status === "ocupado" ? "Ocupada" : "Vacante"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400 dark:text-gray-500">Sin propiedades asignadas</p>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* Contrato activo del inquilino */}
+          {!isOwner && (
+            <>
+              <div className="h-px bg-gray-100 dark:bg-gray-800" />
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                  <FileText size={11} /> Contrato activo
+                </p>
+                {activeLease ? (
+                  <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 rounded-xl p-4 space-y-2">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mb-0.5 flex items-center gap-1">
+                          <Calendar size={10} /> Inicio
+                        </p>
+                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{fmtDate(activeLease.startDate)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mb-0.5 flex items-center gap-1">
+                          <Calendar size={10} /> Vencimiento
+                        </p>
+                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{fmtDate(activeLease.endDate)}</p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium pt-1">
+                      Contrato activo
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400 dark:text-gray-500">Sin contrato activo</p>
+                )}
+              </div>
+            </>
+          )}
+
+          <div className="h-px bg-gray-100 dark:bg-gray-800" />
+
+          {/* Acciones */}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => { onClose(); onEdit(person); }}
+              className="flex items-center justify-center gap-2 py-2.5 px-4 text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              <Edit2 size={14} /> Editar
+            </button>
+            <button
+              onClick={() => { onClose(); onDelete(person.id); }}
+              className="flex items-center justify-center gap-2 py-2.5 px-4 text-sm font-medium rounded-xl border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+            >
+              <Trash2 size={14} /> Eliminar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function Contacts({ owners, setOwners, tenants, setTenants, properties, leases }) {
-  const [tab,     setTab]     = useState("owners");
-  const [search,  setSearch]  = useState("");
-  const [modal,   setModal]   = useState(false);
-  const [saving,  setSaving]  = useState(false);
-  const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ name: "", email: "", phone: "", role: "owner" });
-  const [formError, setFormError] = useState("");
+  const [tab,          setTab]          = useState("owners");
+  const [search,       setSearch]       = useState("");
+  const [modal,        setModal]        = useState(false);
+  const [saving,       setSaving]       = useState(false);
+  const [editing,      setEditing]      = useState(null);
+  const [detailPerson, setDetailPerson] = useState(null);
+  const [form,         setForm]         = useState({ name: "", email: "", phone: "", role: "owner" });
+  const [formError,    setFormError]    = useState("");
 
   const list = (tab === "owners" ? owners : tenants).filter(person => {
     if (!search) return true;
@@ -127,13 +296,23 @@ export function Contacts({ owners, setOwners, tenants, setTenants, properties, l
         />
       </div>
 
+      {list.length > 0 && (
+        <p className="text-xs text-gray-400 dark:text-gray-500 -mt-2">
+          Hacé click en un contacto para ver sus detalles
+        </p>
+      )}
+
       {/* Lista */}
       <div className="grid gap-3">
         {list.map(person => {
           const personProps = tab === "owners" ? properties.filter(p => p.ownerId === person.id) : [];
           const lease       = tab === "tenants" ? leases.find(l => l.id === person.leaseId) : null;
           return (
-            <div key={person.id} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 hover:shadow-md transition-all">
+            <div
+              key={person.id}
+              onClick={() => setDetailPerson(person)}
+              className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 hover:shadow-md transition-all cursor-pointer"
+            >
               <div className="flex items-start gap-4">
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
                   {person.name.charAt(0)}
@@ -153,7 +332,7 @@ export function Contacts({ owners, setOwners, tenants, setTenants, properties, l
                     </p>
                   )}
                 </div>
-                <div className="flex flex-col gap-1 flex-shrink-0">
+                <div className="flex flex-col gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
                   <button onClick={() => openEdit(person)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
                     <Edit2 size={13} className="text-gray-400" />
                   </button>
@@ -175,7 +354,20 @@ export function Contacts({ owners, setOwners, tenants, setTenants, properties, l
         )}
       </div>
 
-      {/* Modal */}
+      {/* Modal de detalle */}
+      {detailPerson && (
+        <ContactDetailModal
+          person={detailPerson}
+          tab={tab}
+          properties={properties}
+          leases={leases}
+          onClose={() => setDetailPerson(null)}
+          onEdit={(p) => { setDetailPerson(null); openEdit(p); }}
+          onDelete={(id) => { setDetailPerson(null); del(id); }}
+        />
+      )}
+
+      {/* Modal crear/editar */}
       <Modal open={modal} onClose={() => { setModal(false); setEditing(null); }} title={editing ? "Editar Contacto" : "Nuevo Contacto"}>
         <div className="space-y-4">
           <Field label="Rol">
