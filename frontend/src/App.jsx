@@ -85,7 +85,8 @@ export default function App() {
           {active === "properties"    && <Properties    {...shared} initialFilter={propFilter} />}
           {active === "contacts"      && <Contacts      {...shared} />}
           {active === "leases"        && <Leases        {...shared} initialTab={leaseFilter} />}
-          {active === "notifications" && <Notifications {...shared} activeAlerts={activeAlerts} dismiss={dismiss} />}
+          {active === "notifications" && <Notifications {...shared} activeAlerts={activeAlerts} dismiss={dismiss} setActive={handleSetActive} />}
+
         </div>
       </main>
     </div>
