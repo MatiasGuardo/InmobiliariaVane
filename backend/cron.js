@@ -1,0 +1,180 @@
+// ============================================================
+//  backend/cron.js
+//  Evaluador diario de actualizaciones de contratos
+//
+//  Instalar dependencia:
+//    npm install node-cron
+//
+//  Importar en server.js:
+//    import "./cron.js";
+// ============================================================
+
+import cron from "node-cron";
+import { pool } from "./db.js";
+import { calcularMontoProyectado, calcularProximaActualizacion } from "./services/rentCalc.js";
+
+// ─── Logger mínimo ───────────────────────────────────────────
+function log(msg)  { console.log (`[CRON ${new Date().toISOString()}] ${msg}`); }
+function warn(msg) { console.warn(`[CRON ${new Date().toISOString()}] ⚠ ${msg}`); }
+
+// ─── Evaluador principal ──────────────────────────────────────
+export async function evaluarActualizacionesContratos() {
+  log("Iniciando evaluación de actualizaciones de contratos…");
+
+  const hoy      = new Date();
+  const hoyStr   = hoy.toISOString().split("T")[0];
+
+  // Ventana de búsqueda: contratos con proxima_actualizacion entre hoy y hoy+30
+  const en30     = new Date(hoy);
+  en30.setDate(en30.getDate() + 30);
+  const en30Str  = en30.toISOString().split("T")[0];
+
+  try {
+    // ── 1. Obtener contratos activos con proxima_actualizacion en la ventana ──
+    const [contratos] = await pool.query(
+      `SELECT
+         c.id,
+         c.monto_renta,
+         c.tipo_ajuste,
+         c.periodo_ajuste,
+         c.porcentaje_ajuste,
+         c.indice_base_fecha,
+         c.indice_base_valor,
+         c.proxima_actualizacion,
+         c.fecha_inicio,
+         c.fecha_fin,
+         -- inquilino
+         pi.nombre    AS inq_nombre,
+         pi.apellido  AS inq_apellido,
+         pi.email     AS inq_email,
+         -- propietario
+         pp.nombre    AS prop_nombre,
+         pp.apellido  AS prop_apellido,
+         pp.email     AS prop_email,
+         -- propiedad
+         pr.direccion AS prop_direccion
+       FROM contratos c
+       JOIN personas pi ON pi.id = c.inquilino_id
+       JOIN personas pp ON pp.id = c.propietario_id
+       JOIN propiedades pr ON pr.id = c.propiedad_id
+       WHERE c.estado_contrato = 'activo'
+         AND c.proxima_actualizacion IS NOT NULL
+         AND c.proxima_actualizacion BETWEEN ? AND ?`,
+      [hoyStr, en30Str]
+    );
+
+    if (!contratos.length) {
+      log("Sin contratos a evaluar en los próximos 30 días.");
+      return;
+    }
+
+    log(`Evaluando ${contratos.length} contrato(s)…`);
+
+    for (const c of contratos) {
+      const fechaAct = c.proxima_actualizacion instanceof Date
+        ? c.proxima_actualizacion.toISOString().split("T")[0]
+        : String(c.proxima_actualizacion).slice(0, 10);
+
+      const diasRestantes = Math.ceil(
+        (new Date(fechaAct) - hoy) / 86400000
+      );
+
+      // ── 2. Determinar tipo de alerta ──
+      let tipoAlerta = null;
+      if      (diasRestantes <= 0)  tipoAlerta = "HOY";
+      else if (diasRestantes <= 15) tipoAlerta = "15_DIAS";
+      else if (diasRestantes <= 30) tipoAlerta = "30_DIAS";
+
+      if (!tipoAlerta) continue;
+
+      // ── 3. Verificar si ya se emitió esta alerta (deduplicación) ──
+      const [[existente]] = await pool.query(
+        `SELECT id FROM alertas_actualizacion
+         WHERE contrato_id  = ?
+           AND tipo_alerta  = ?
+           AND fecha_alerta = ?
+         LIMIT 1`,
+        [c.id, tipoAlerta, fechaAct]
+      );
+
+      if (existente) {
+        log(`Contrato #${c.id} — alerta ${tipoAlerta} ya emitida. Omitiendo.`);
+        continue;
+      }
+
+      // ── 4. Calcular monto proyectado ──
+      const { montoProyectado, indiceActualValor } = await calcularMontoProyectado({
+        monto_renta:           c.monto_renta,
+        tipo_ajuste:           c.tipo_ajuste   ?? "FIJO",
+        porcentaje_ajuste:     c.porcentaje_ajuste,
+        indice_base_valor:     c.indice_base_valor
+          ? parseFloat(c.indice_base_valor)
+          : null,
+        proxima_actualizacion: fechaAct,
+      });
+
+      // ── 5. Guardar alerta en la BD ──
+      await pool.query(
+        `INSERT INTO alertas_actualizacion
+           (contrato_id, tipo_alerta, fecha_alerta,
+            monto_base, monto_proyectado, indice_actual_valor)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          c.id,
+          tipoAlerta,
+          fechaAct,
+          c.monto_renta,
+          montoProyectado,
+          indiceActualValor,
+        ]
+      );
+
+      // ── 6. Log de la alerta (reemplazar con email/push cuando esté listo) ──
+      const tipoLabel = c.tipo_ajuste ?? "FIJO";
+      const montoStr  = montoProyectado
+        ? `$${Number(montoProyectado).toLocaleString("es-AR")}`
+        : "(índice no disponible aún)";
+
+      log(
+        `🔔 ALERTA [${tipoAlerta}] — Contrato #${c.id}\n` +
+        `   Propiedad  : ${c.prop_direccion}\n` +
+        `   Inquilino  : ${c.inq_nombre} ${c.inq_apellido} <${c.inq_email}>\n` +
+        `   Propietario: ${c.prop_nombre} ${c.prop_apellido} <${c.prop_email}>\n` +
+        `   Tipo ajuste: ${tipoLabel} (${c.periodo_ajuste})\n` +
+        `   Fecha act. : ${fechaAct}  (en ${diasRestantes} días)\n` +
+        `   Monto base : $${Number(c.monto_renta).toLocaleString("es-AR")}\n` +
+        `   Monto proy.: ${montoStr}`
+      );
+
+      // ── 7. Si es HOY → avanzar proxima_actualizacion al siguiente período ──
+      if (tipoAlerta === "HOY") {
+        const siguiente = calcularProximaActualizacion(
+          fechaAct,
+          c.periodo_ajuste ?? "anual"
+        );
+        await pool.query(
+          "UPDATE contratos SET proxima_actualizacion = ? WHERE id = ?",
+          [siguiente, c.id]
+        );
+        log(`Contrato #${c.id} — próxima actualización avanzada a ${siguiente}`);
+      }
+    }
+
+    log("Evaluación finalizada.");
+  } catch (err) {
+    warn(`Error en evaluación: ${err.message}`);
+    console.error(err);
+  }
+}
+
+// ─── Registro del cron ────────────────────────────────────────
+// Se ejecuta todos los días a las 08:00 (hora del servidor)
+cron.schedule("0 8 * * *", evaluarActualizacionesContratos, {
+  scheduled: true,
+  timezone:  "America/Argentina/Buenos_Aires",
+});
+
+log("Cron de actualizaciones registrado — ejecución diaria a las 08:00 ART");
+
+// Exportar para poder llamar manualmente en tests o desde una ruta admin
+export default evaluarActualizacionesContratos;
