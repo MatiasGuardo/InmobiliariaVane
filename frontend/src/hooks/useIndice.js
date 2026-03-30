@@ -1,21 +1,43 @@
 // frontend/src/hooks/useIndice.js
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { API } from "../utils/helpers";
 
 export function useIndice(tipo) {
-  const [rows,    setRows]    = useState([]);
+  const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState(null);
+  const [error, setError] = useState(null);
+  const abortRef = useRef(null);
 
   const load = useCallback(async () => {
-    if (!tipo || tipo === "FIJO") { setRows([]); return; }
+    if (!tipo || tipo === "FIJO") {
+      setRows([]);
+      setError(null);
+      return;
+    }
+
+    // Cancelar request anterior si existe
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setLoading(true);
     setError(null);
+
     try {
-      const res = await fetch(`${API}/api/indices/${tipo}`);
+      // Cache-buster para evitar respuestas cacheadas por el navegador
+      const ts = Date.now();
+      const res = await fetch(`${API}/api/indices/${tipo}?_t=${ts}`, {
+        signal: controller.signal,
+        headers: { "Cache-Control": "no-cache" },
+      });
+
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setRows(await res.json());
+      const data = await res.json();
+      setRows(Array.isArray(data) ? data : []);
     } catch (e) {
+      if (e.name === "AbortError") return; // request cancelado intencionalmente
       setError(e.message);
       setRows([]);
     } finally {
@@ -23,7 +45,15 @@ export function useIndice(tipo) {
     }
   }, [tipo]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    return () => {
+      // Cleanup: cancelar request al desmontar o cambiar tipo
+      if (abortRef.current) {
+        abortRef.current.abort();
+      }
+    };
+  }, [load]);
 
   return { rows, loading, error, reload: load };
 }
