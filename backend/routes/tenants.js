@@ -66,14 +66,47 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// DELETE /api/tenants/:id (baja lógica)
+// DELETE /api/tenants/:id
+// Cascada: contrato activo → documentos del contrato → propiedad queda disponible → inquilino baja lógica
 router.delete("/:id", async (req, res) => {
+  const conn = await pool.getConnection();
   try {
-    await pool.query("UPDATE personas SET activo = 0 WHERE id = ?", [req.params.id]);
+    await conn.beginTransaction();
+
+    // 1. Obtener contrato activo del inquilino
+    const [contratos] = await conn.query(
+      "SELECT id, propiedad_id FROM contratos WHERE inquilino_id = ? AND estado_contrato = 'activo'",
+      [req.params.id]
+    );
+
+    for (const contrato of contratos) {
+      // 2. Eliminar documentos del contrato
+      await conn.query(
+        "DELETE FROM documentos WHERE entity_type = 'lease' AND entity_id = ?",
+        [contrato.id]
+      );
+
+      // 3. Eliminar el contrato
+      await conn.query("DELETE FROM contratos WHERE id = ?", [contrato.id]);
+
+      // 4. Poner la propiedad como disponible
+      await conn.query(
+        "UPDATE propiedades SET estado = 'disponible' WHERE id = ?",
+        [contrato.propiedad_id]
+      );
+    }
+
+    // 5. Dar de baja al inquilino
+    await conn.query("UPDATE personas SET activo = 0 WHERE id = ?", [req.params.id]);
+
+    await conn.commit();
     res.json({ ok: true });
   } catch (err) {
+    await conn.rollback();
     console.error(err);
     res.status(500).json({ error: "Error al eliminar inquilino" });
+  } finally {
+    conn.release();
   }
 });
 

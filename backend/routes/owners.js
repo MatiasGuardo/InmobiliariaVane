@@ -67,14 +67,63 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// DELETE /api/owners/:id (baja lógica)
+// DELETE /api/owners/:id
+// Cascada: propiedades → contratos → documentos de contratos → documentos de propiedades → persona
 router.delete("/:id", async (req, res) => {
+  const conn = await pool.getConnection();
   try {
-    await pool.query("UPDATE personas SET activo = 0 WHERE id = ?", [req.params.id]);
+    await conn.beginTransaction();
+
+    // 1. Obtener todas las propiedades activas del propietario
+    const [props] = await conn.query(
+      "SELECT id FROM propiedades WHERE id_propietario = ? AND activo = 1",
+      [req.params.id]
+    );
+
+    for (const prop of props) {
+      // 2. Obtener contratos activos de cada propiedad
+      const [contratos] = await conn.query(
+        "SELECT id FROM contratos WHERE propiedad_id = ?",
+        [prop.id]
+      );
+
+      for (const contrato of contratos) {
+        // 3. Eliminar documentos del contrato
+        await conn.query(
+          "DELETE FROM documentos WHERE entity_type = 'lease' AND entity_id = ?",
+          [contrato.id]
+        );
+      }
+
+      // 4. Eliminar todos los contratos de la propiedad
+      await conn.query("DELETE FROM contratos WHERE propiedad_id = ?", [prop.id]);
+
+      // 5. Eliminar documentos de la propiedad
+      await conn.query(
+        "DELETE FROM documentos WHERE entity_type = 'property' AND entity_id = ?",
+        [prop.id]
+      );
+    }
+
+    // 6. Dar de baja todas las propiedades del propietario
+    if (props.length > 0) {
+      await conn.query(
+        "UPDATE propiedades SET activo = 0 WHERE id_propietario = ?",
+        [req.params.id]
+      );
+    }
+
+    // 7. Dar de baja al propietario
+    await conn.query("UPDATE personas SET activo = 0 WHERE id = ?", [req.params.id]);
+
+    await conn.commit();
     res.json({ ok: true });
   } catch (err) {
+    await conn.rollback();
     console.error(err);
     res.status(500).json({ error: "Error al eliminar propietario" });
+  } finally {
+    conn.release();
   }
 });
 
