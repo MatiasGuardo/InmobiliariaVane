@@ -1,9 +1,17 @@
 import { useState } from "react";
-import { AlertTriangle, Calendar, CheckCircle, Edit2, FileText, Percent, Plus, RefreshCw, Search, Trash2, Calculator, X, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
-import { Modal }              from "../components/ui/Modal";
+import {
+  AlertTriangle, Calendar, CheckCircle, Edit2, FileText, Percent, Plus,
+  RefreshCw, Search, Trash2, Calculator, X, ArrowUpDown,
+  Building2, User, DollarSign, Phone, Mail, MapPin, Paperclip,
+} from "lucide-react";
+import { Modal }                from "../components/ui/Modal";
 import { Field, Input, Select } from "../components/ui/FormField";
-import { Badge }              from "../components/ui/Badge";
-import { fmtDate, fmtCurrency, fmtDuration, diffDays, getAlertLevel, isValidDate, API } from "../utils/helpers";
+import { Badge }                from "../components/ui/Badge";
+import { DocumentsSection }     from "../components/ui/DocumentsSection";
+import { useDocuments }         from "../hooks/useDocuments";
+import {
+  fmtDate, fmtCurrency, fmtDuration, diffDays, getAlertLevel, isValidDate, API,
+} from "../utils/helpers";
 
 const PERIODS = [
   { value: "trimestral", label: "Trimestral", months: 3  },
@@ -20,16 +28,11 @@ const SORT_OPTIONS = [
   { value: "inicio_desc",      label: "Más reciente"  },
 ];
 
-// ─── Estilos de alerta mejorados para dark mode ───────────────
-// En lugar de bordes intensos, usamos un acento sutil en el lado izquierdo
-// y un fondo muy leve, más elegante en dark mode
 function getAlertStyles(alert) {
   if (!alert) return {
     card: "border border-gray-100 dark:border-gray-700/60",
     bar:  "bg-blue-500",
-    leftAccent: "",
   };
-
   const styles = {
     Crítico: {
       card: "border border-red-200/70 dark:border-gray-700/60 dark:shadow-[inset_3px_0_0_0_rgba(239,68,68,0.6)]",
@@ -47,8 +50,204 @@ function getAlertStyles(alert) {
       dot:  "bg-amber-400",
     },
   };
-
   return styles[alert.label] || styles["Próximo"];
+}
+
+// ─── Modal de detalle de contrato ─────────────────────────────────────────────
+function LeaseDetailModal({ lease, properties, tenants, owners, onClose, onEdit, onRenew, onDelete }) {
+  if (!lease) return null;
+
+  const prop   = properties.find(p => p.id === lease.propertyId);
+  const tenant = tenants.find(t => t.id === lease.tenantId);
+  const owner  = prop ? owners.find(o => o.id === prop.ownerId) : null;
+  const days   = diffDays(lease.endDate);
+  const alert  = lease.status === "activo" ? getAlertLevel(days) : null;
+  const periodLabel = PERIODS.find(p => p.value === lease.period)?.label || "Anual";
+
+  const levelColors = {
+    "Crítico": { header: "bg-red-500",    ring: "ring-red-200 dark:ring-red-900/60" },
+    "Urgente": { header: "bg-orange-400", ring: "ring-orange-200 dark:ring-orange-900/60" },
+    "Próximo": { header: "bg-amber-400",  ring: "ring-amber-200 dark:ring-amber-900/60" },
+  };
+  const lc = alert ? (levelColors[alert.label] || levelColors["Próximo"]) : null;
+
+  // Documentos del contrato
+  const docState = useDocuments("lease", lease.id);
+
+  const canRenew = lease.status === "activo" || lease.status === "vencido";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div
+        className={`relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto ${lc ? `ring-1 ${lc.ring}` : "border border-gray-100 dark:border-gray-700"}`}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header con color de alerta o azul normal */}
+        <div className={`${lc ? lc.header : "bg-blue-600"} px-6 py-5 rounded-t-2xl`}>
+          <div className="flex items-start justify-between">
+            <div className="min-w-0 pr-3">
+              {alert && (
+                <div className="flex items-center gap-1.5 mb-1">
+                  <AlertTriangle size={14} className="text-white" />
+                  <span className="text-white/90 text-xs font-semibold">{alert.label}</span>
+                </div>
+              )}
+              <p className="text-white font-bold text-base leading-snug truncate">{prop?.address}</p>
+              <p className="text-white/70 text-sm mt-0.5">{prop?.type}</p>
+            </div>
+            <button onClick={onClose} className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 transition-colors flex-shrink-0">
+              <X size={15} className="text-white" />
+            </button>
+          </div>
+          <div className="mt-4 flex items-end gap-2">
+            <p className="text-3xl font-black text-white leading-none">{fmtCurrency(lease.rent)}</p>
+            <p className="text-white/70 text-sm mb-0.5">/ mes</p>
+            {alert && (
+              <p className="ml-auto text-white font-bold text-sm">
+                {days <= 0 ? "Venció" : `${days} días restantes`}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Cuerpo */}
+        <div className="p-6 space-y-5">
+
+          {/* Propiedad */}
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+              <MapPin size={11} /> Propiedad
+            </p>
+            <p className="font-semibold text-gray-800 dark:text-gray-100">{prop?.address}</p>
+            {prop?.type && <p className="text-xs text-gray-400 dark:text-gray-500">{prop.type}</p>}
+          </div>
+
+          <div className="h-px bg-gray-100 dark:bg-gray-800" />
+
+          {/* Inquilino */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+              <User size={11} /> Inquilino
+            </p>
+            <p className="font-semibold text-gray-800 dark:text-gray-100">{tenant?.name}</p>
+            <div className="flex flex-col gap-1">
+              {tenant?.email && (
+                <span className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                  <Mail size={11} className="text-gray-400 flex-shrink-0" />{tenant.email}
+                </span>
+              )}
+              {tenant?.phone && (
+                <span className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                  <Phone size={11} className="text-gray-400 flex-shrink-0" />{tenant.phone}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="h-px bg-gray-100 dark:bg-gray-800" />
+
+          {/* Propietario */}
+          {owner && (
+            <>
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                  <Building2 size={11} /> Propietario
+                </p>
+                <p className="font-semibold text-gray-800 dark:text-gray-100">{owner.name}</p>
+                <div className="flex flex-col gap-1">
+                  {owner.email && (
+                    <span className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                      <Mail size={11} className="text-gray-400 flex-shrink-0" />{owner.email}
+                    </span>
+                  )}
+                  {owner.phone && (
+                    <span className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                      <Phone size={11} className="text-gray-400 flex-shrink-0" />{owner.phone}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="h-px bg-gray-100 dark:bg-gray-800" />
+            </>
+          )}
+
+          {/* Info del contrato */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
+              <p className="text-xs text-gray-400 dark:text-gray-500 mb-1 flex items-center gap-1">
+                <Calendar size={10} /> Inicio
+              </p>
+              <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{fmtDate(lease.startDate)}</p>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
+              <p className="text-xs text-gray-400 dark:text-gray-500 mb-1 flex items-center gap-1">
+                <Calendar size={10} /> Vencimiento
+              </p>
+              <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{fmtDate(lease.endDate)}</p>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
+              <p className="text-xs text-gray-400 dark:text-gray-500 mb-1 flex items-center gap-1">
+                <DollarSign size={10} /> Renta mensual
+              </p>
+              <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">{fmtCurrency(lease.rent)}</p>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
+              <p className="text-xs text-gray-400 dark:text-gray-500 mb-1 flex items-center gap-1">
+                <Percent size={10} /> Ajuste
+              </p>
+              <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                +{lease.increase}% {periodLabel.toLowerCase()}
+              </p>
+            </div>
+          </div>
+
+          {/* Estado */}
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-gray-400 dark:text-gray-500">Estado:</p>
+            <Badge status={lease.status} />
+          </div>
+
+          <div className="h-px bg-gray-100 dark:bg-gray-800" />
+
+          {/* Documentos */}
+          <DocumentsSection
+            entityType="lease"
+            entityId={lease.id}
+            {...docState}
+          />
+
+          <div className="h-px bg-gray-100 dark:bg-gray-800" />
+
+          {/* Acciones */}
+          <div className="grid grid-cols-2 gap-2">
+            {lease.status === "activo" && (
+              <button
+                onClick={() => { onClose(); onEdit(lease); }}
+                className="flex items-center justify-center gap-2 py-2.5 px-4 text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                <Edit2 size={14} /> Editar
+              </button>
+            )}
+            {canRenew && (
+              <button
+                onClick={() => { onClose(); onRenew(lease); }}
+                className="flex items-center justify-center gap-2 py-2.5 px-4 text-sm font-medium rounded-xl border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
+              >
+                <RefreshCw size={14} /> Renovar
+              </button>
+            )}
+            <button
+              onClick={() => { onClose(); onDelete(lease.id); }}
+              className="flex items-center justify-center gap-2 py-2.5 px-4 text-sm font-medium rounded-xl border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors col-span-full"
+            >
+              <Trash2 size={14} /> Eliminar contrato
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── Calculadora de ajuste ─────────────────────────────────────
@@ -80,7 +279,6 @@ function RentCalculator({ lease, onClose }) {
           <X size={14} className="text-blue-500 dark:text-blue-400" />
         </button>
       </div>
-
       <div className="p-5 space-y-4">
         <div className="grid grid-cols-3 gap-2">
           {[
@@ -94,7 +292,6 @@ function RentCalculator({ lease, onClose }) {
             </div>
           ))}
         </div>
-
         <div>
           <div className="flex justify-between items-center mb-2">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Número de ajustes</label>
@@ -114,7 +311,6 @@ function RentCalculator({ lease, onClose }) {
             <span>{maxPeriods * periodInfo.months} meses</span>
           </div>
         </div>
-
         <div className="rounded-xl overflow-hidden border border-gray-100 dark:border-gray-700">
           <div className="grid grid-cols-3 bg-gray-50 dark:bg-gray-700/50 px-4 py-2">
             {["Período", "Fecha", "Renta"].map((h, i) => (
@@ -139,7 +335,6 @@ function RentCalculator({ lease, onClose }) {
             );
           })}
         </div>
-
         <div className="flex items-center justify-between p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-100 dark:border-emerald-800">
           <div>
             <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
@@ -157,7 +352,6 @@ function RentCalculator({ lease, onClose }) {
   );
 }
 
-// ─── Selector de periodicidad ─────────────────────────────────
 function PeriodSelector({ value, onChange }) {
   return (
     <div className="flex gap-1.5">
@@ -175,7 +369,6 @@ function PeriodSelector({ value, onChange }) {
   );
 }
 
-// ─── Validación ──────────────────────────────────────────────
 function validateLeaseForm(form, isNew = true) {
   const errors = [];
   if (!form.propertyId) errors.push("propiedad");
@@ -215,34 +408,38 @@ function validateRenewForm(form) {
   return null;
 }
 
-// ─── Función de ordenamiento ──────────────────────────────────
 function applySorting(list, sortKey) {
   const sorted = [...list];
   switch (sortKey) {
-    case "vencimiento_asc":
-      return sorted.sort((a, b) => new Date(a.endDate) - new Date(b.endDate));
-    case "vencimiento_desc":
-      return sorted.sort((a, b) => new Date(b.endDate) - new Date(a.endDate));
-    case "precio_asc":
-      return sorted.sort((a, b) => a.rent - b.rent);
-    case "precio_desc":
-      return sorted.sort((a, b) => b.rent - a.rent);
-    case "inicio_asc":
-      return sorted.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
-    case "inicio_desc":
-      return sorted.sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
-    default:
-      return sorted;
+    case "vencimiento_asc":  return sorted.sort((a, b) => new Date(a.endDate)   - new Date(b.endDate));
+    case "vencimiento_desc": return sorted.sort((a, b) => new Date(b.endDate)   - new Date(a.endDate));
+    case "precio_asc":       return sorted.sort((a, b) => a.rent - b.rent);
+    case "precio_desc":      return sorted.sort((a, b) => b.rent - a.rent);
+    case "inicio_asc":       return sorted.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+    case "inicio_desc":      return sorted.sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
+    default: return sorted;
   }
 }
 
+// ─── DocumentsInModal — usado dentro del modal de creación/edición ────────────
+function DocumentsInModal({ leaseId }) {
+  const docState = useDocuments("lease", leaseId);
+  if (!leaseId) return (
+    <p className="text-xs text-gray-400 dark:text-gray-500 text-center py-2">
+      Guardá el contrato primero para adjuntar documentos.
+    </p>
+  );
+  return <DocumentsSection entityType="lease" entityId={leaseId} {...docState} />;
+}
+
 // ─── Leases ───────────────────────────────────────────────────
-export function Leases({ leases, setLeases, properties, tenants, initialTab = "activo" }) {
+export function Leases({ leases, setLeases, properties, tenants, owners, initialTab = "activo" }) {
   const [tab,         setTab]         = useState(initialTab === "activo" ? "activo" : "finalizado");
   const [search,      setSearch]      = useState("");
   const [sortKey,     setSortKey]     = useState("vencimiento_asc");
   const [modal,       setModal]       = useState(false);
   const [renewModal,  setRenewModal]  = useState(false);
+  const [detailLease, setDetailLease] = useState(null);
   const [saving,      setSaving]      = useState(false);
   const [editing,     setEditing]     = useState(null);
   const [renewTarget, setRenewTarget] = useState(null);
@@ -336,7 +533,6 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
     try {
       const delRes = await fetch(`${API}/api/leases/${renewTarget.id}`, { method: "DELETE" });
       if (!delRes.ok) throw new Error(await delRes.text());
-
       const res = await fetch(`${API}/api/leases`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -351,7 +547,6 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
       });
       if (!res.ok) throw new Error(await res.text());
       const newLease = await res.json();
-
       setLeases(prev => [...prev.filter(l => l.id !== renewTarget.id), newLease]);
       setRenewModal(false);
       setRenewTarget(null);
@@ -379,88 +574,97 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
     ));
     const periodLabel = PERIODS.find(p => p.value === l.period)?.label || "Anual";
     const isCalcOpen  = calcOpen === l.id;
-    const canRenew = l.status === "activo" || l.status === "vencido";
+    const canRenew    = l.status === "activo" || l.status === "vencido";
 
     return (
-      <div className={`bg-white dark:bg-gray-800 rounded-2xl ${styles.card} p-5 transition-all hover:shadow-md`}>
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-4 min-w-0">
-            {/* Ícono con dot de color según alerta */}
-            <div className="relative flex-shrink-0">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
-                <FileText size={16} className="text-blue-600 dark:text-blue-400" />
+      <div
+        className={`bg-white dark:bg-gray-800 rounded-2xl ${styles.card} transition-all hover:shadow-md`}
+      >
+        {/* Área clickeable para el modal de detalle */}
+        <div
+          className="p-5 cursor-pointer"
+          onClick={() => setDetailLease(l)}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-4 min-w-0">
+              <div className="relative flex-shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
+                  <FileText size={16} className="text-blue-600 dark:text-blue-400" />
+                </div>
+                {alert && (
+                  <span className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-gray-800 ${styles.dot}`} />
+                )}
               </div>
-              {alert && (
-                <span className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-gray-800 ${styles.dot}`} />
-              )}
+              <div className="min-w-0">
+                <p className="font-semibold text-gray-800 dark:text-gray-200 truncate">{prop?.address}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{tenant?.name}</p>
+                <div className="flex flex-wrap items-center gap-4 mt-2">
+                  <span className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">
+                    <Calendar size={11} />{fmtDate(l.startDate)} → {fmtDate(l.endDate)}
+                  </span>
+                  <span className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">
+                    <Percent size={11} />+{l.increase}% {periodLabel.toLowerCase()}
+                  </span>
+                </div>
+              </div>
             </div>
-            <div className="min-w-0">
-              <p className="font-semibold text-gray-800 dark:text-gray-200 truncate">{prop?.address}</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{tenant?.name}</p>
-              <div className="flex flex-wrap items-center gap-4 mt-2">
-                <span className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">
-                  <Calendar size={11} />{fmtDate(l.startDate)} → {fmtDate(l.endDate)}
-                </span>
-                <span className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">
-                  <Percent size={11} />+{l.increase}% {periodLabel.toLowerCase()}
-                </span>
+
+            <div className="flex items-start gap-2 flex-shrink-0">
+              <div className="text-right">
+                <p className="font-bold text-gray-900 dark:text-gray-100">{fmtCurrency(l.rent)}</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">por mes</p>
+                {alert
+                  ? <p className={`text-xs font-semibold mt-1 ${alert.color}`}>{days <= 0 ? "Venció" : `${fmtDuration(days)} restantes`}</p>
+                  : <Badge status={l.status} />
+                }
+              </div>
+              {/* Botones de acción rápida — stopPropagation para no abrir el modal */}
+              <div className="flex flex-col gap-1" onClick={e => e.stopPropagation()}>
+                {l.status === "activo" && (
+                  <>
+                    <button onClick={() => openEdit(l)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" title="Editar">
+                      <Edit2 size={13} className="text-gray-400" />
+                    </button>
+                    <button
+                      onClick={() => setCalcOpen(isCalcOpen ? null : l.id)}
+                      className={`p-1.5 rounded-lg transition-colors ${isCalcOpen ? "bg-blue-100 dark:bg-blue-900/40" : "hover:bg-blue-50 dark:hover:bg-blue-900/20"}`}
+                      title="Calculadora de ajuste"
+                    >
+                      <Calculator size={13} className="text-blue-500 dark:text-blue-400" />
+                    </button>
+                  </>
+                )}
+                {canRenew && (
+                  <button onClick={() => openRenew(l)} className="p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors" title="Renovar contrato">
+                    <RefreshCw size={13} className="text-emerald-500" />
+                  </button>
+                )}
+                <button onClick={() => del(l.id)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" title="Eliminar">
+                  <Trash2 size={13} className="text-red-400" />
+                </button>
               </div>
             </div>
           </div>
 
-          <div className="flex items-start gap-2 flex-shrink-0">
-            <div className="text-right">
-              <p className="font-bold text-gray-900 dark:text-gray-100">{fmtCurrency(l.rent)}</p>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">por mes</p>
-              {alert
-                ? <p className={`text-xs font-semibold mt-1 ${alert.color}`}>{days <= 0 ? "Venció" : `${fmtDuration(days)} restantes`}</p>
-                : <Badge status={l.status} />
-              }
+          {l.status === "activo" && (
+            <div className="mt-4">
+              <div className="flex justify-between text-xs text-gray-400 dark:text-gray-500 mb-1.5">
+                <span>Progreso del contrato</span>
+                <span>{Math.round(progress)}%</span>
+              </div>
+              <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-700 ${styles.bar || "bg-blue-500"}`}
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
             </div>
-            <div className="flex flex-col gap-1">
-              {l.status === "activo" && (
-                <>
-                  <button onClick={() => openEdit(l)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" title="Editar">
-                    <Edit2 size={13} className="text-gray-400" />
-                  </button>
-                  <button
-                    onClick={() => setCalcOpen(isCalcOpen ? null : l.id)}
-                    className={`p-1.5 rounded-lg transition-colors ${isCalcOpen ? "bg-blue-100 dark:bg-blue-900/40" : "hover:bg-blue-50 dark:hover:bg-blue-900/20"}`}
-                    title="Calculadora de ajuste"
-                  >
-                    <Calculator size={13} className="text-blue-500 dark:text-blue-400" />
-                  </button>
-                </>
-              )}
-              {canRenew && (
-                <button onClick={() => openRenew(l)} className="p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors" title="Renovar contrato">
-                  <RefreshCw size={13} className="text-emerald-500" />
-                </button>
-              )}
-              <button onClick={() => del(l.id)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" title="Eliminar">
-                <Trash2 size={13} className="text-red-400" />
-              </button>
-            </div>
-          </div>
+          )}
         </div>
 
-        {l.status === "activo" && (
-          <div className="mt-4">
-            <div className="flex justify-between text-xs text-gray-400 dark:text-gray-500 mb-1.5">
-              <span>Progreso del contrato</span>
-              <span>{Math.round(progress)}%</span>
-            </div>
-            <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-700 ${styles.bar || "bg-blue-500"}`}
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-          </div>
-        )}
-
+        {/* Calculadora (fuera del área clickeable) */}
         {isCalcOpen && (
-          <div className="mt-4">
+          <div className="px-5 pb-5">
             <RentCalculator lease={l} onClose={() => setCalcOpen(null)} />
           </div>
         )}
@@ -494,18 +698,12 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
             key={key}
             onClick={() => { setTab(key); setSearch(""); setCalcOpen(null); setSortKey("vencimiento_asc"); }}
             className={`flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-lg transition-all ${
-              tab === key
-                ? "bg-blue-600 text-white"
-                : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+              tab === key ? "bg-blue-600 text-white" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
             }`}
           >
             {label}
             {count > 0 && (
-              <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                tab === key
-                  ? "bg-white/20 text-white"
-                  : "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
-              }`}>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full ${tab === key ? "bg-white/20 text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400"}`}>
                 {count}
               </span>
             )}
@@ -524,8 +722,6 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
             className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 outline-none transition-all placeholder:text-gray-400"
           />
         </div>
-
-        {/* Selector de ordenamiento */}
         <div className="relative">
           <select
             value={sortKey}
@@ -545,6 +741,13 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
         </div>
       </div>
 
+      {/* Hint */}
+      {currentList.length > 0 && (
+        <p className="text-xs text-gray-400 dark:text-gray-500 -mt-2">
+          Hacé click en una tarjeta para ver los detalles del contrato
+        </p>
+      )}
+
       {/* Lista */}
       <div className="space-y-3">
         {currentList.length === 0 ? (
@@ -561,6 +764,20 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
           currentList.map(l => <LeaseCard key={l.id} l={l} />)
         )}
       </div>
+
+      {/* ── Modal de detalle ── */}
+      {detailLease && (
+        <LeaseDetailModal
+          lease={detailLease}
+          properties={properties}
+          tenants={tenants}
+          owners={owners || []}
+          onClose={() => setDetailLease(null)}
+          onEdit={(l) => { setDetailLease(null); openEdit(l); }}
+          onRenew={(l) => { setDetailLease(null); openRenew(l); }}
+          onDelete={(id) => { setDetailLease(null); del(id); }}
+        />
+      )}
 
       {/* ── Modal nuevo / editar ── */}
       <Modal open={modal} onClose={() => { setModal(false); setEditing(null); }} title={editing ? "Editar Contrato" : "Nuevo Contrato"} wide>
@@ -613,6 +830,14 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
               </p>
             )}
           </div>
+
+          {/* Documentos en edición */}
+          {editing && (
+            <div className="rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 p-4">
+              <DocumentsInModal leaseId={editing} />
+            </div>
+          )}
+
           {formError && (
             <div className="flex items-start gap-2.5 p-3.5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
               <AlertTriangle size={15} className="text-red-500 flex-shrink-0 mt-0.5" />
@@ -649,7 +874,6 @@ export function Leases({ leases, setLeases, properties, tenants, initialTab = "a
                 ⚠ Este contrato se eliminará y será reemplazado por el nuevo.
               </p>
             </div>
-
             <Field label="Inquilino para el nuevo contrato">
               <Select value={renewForm.tenantId} onChange={e => { setRenewForm({ ...renewForm, tenantId: e.target.value }); setRenewError(""); }}>
                 <option value="">Seleccionar...</option>

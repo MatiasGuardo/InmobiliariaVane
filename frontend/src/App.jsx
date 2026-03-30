@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Sidebar }       from "./components/layout/Sidebar";
 import { Dashboard }     from "./pages/Dashboard";
 import { Properties }    from "./pages/Properties";
@@ -26,7 +26,6 @@ export default function App() {
 
   const { badgeCount, dismiss, activeAlerts } = useAlerts(leases);
 
-  // setActive acepta string simple o { page, filter }
   const handleSetActive = (target) => {
     if (typeof target === "string") {
       setActiveRaw(target);
@@ -86,7 +85,6 @@ export default function App() {
           {active === "contacts"      && <Contacts      {...shared} />}
           {active === "leases"        && <Leases        {...shared} initialTab={leaseFilter} />}
           {active === "notifications" && <Notifications {...shared} activeAlerts={activeAlerts} dismiss={dismiss} setActive={handleSetActive} />}
-
         </div>
       </main>
     </div>
