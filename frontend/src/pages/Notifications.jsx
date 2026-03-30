@@ -439,3 +439,83 @@ export function Notifications({ leases, properties, tenants, activeAlerts, dismi
     </div>
   );
 }
+// IndicesAdmin.jsx — panel minimalista de carga manual
+import { API } from "../utils/helpers";
+import { Field, Input, Select } from "../components/ui/FormField";
+
+export function IndicesAdmin() {
+  const [tipo,    setTipo]    = useState("ICL");
+  const [periodo, setPeriodo] = useState("");
+  const [valor,   setValor]   = useState("");
+  const [status,  setStatus]  = useState(null);
+  const [syncing, setSyncing] = useState(false);
+
+  const syncBCRA = async () => {
+    setSyncing(true);
+    setStatus(null);
+    try {
+      const res = await fetch(`${API}/api/indices/sync`, { method: "POST" });
+      const data = await res.json();
+      setStatus({ ok: true, msg: `Sincronizado — ICL: ${data.ICL} registros, IPC: ${data.IPC} registros` });
+    } catch (e) {
+      setStatus({ ok: false, msg: e.message });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const saveManual = async () => {
+    if (!periodo || !valor) return;
+    try {
+      const res = await fetch(`${API}/api/indices`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipo, periodo, valor: parseFloat(valor) }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setStatus({ ok: true, msg: `Guardado: ${tipo} ${periodo.slice(0,7)} = ${valor}` });
+      setValor("");
+    } catch (e) {
+      setStatus({ ok: false, msg: e.message });
+    }
+  };
+
+  return (
+    <div className="space-y-4 p-5 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700">
+      <h3 className="font-semibold text-gray-800 dark:text-gray-200">Gestión de Índices</h3>
+
+      {/* Sync automático */}
+      <button onClick={syncBCRA} disabled={syncing}
+        className="w-full py-2.5 bg-teal-600 text-white text-sm font-medium rounded-xl hover:bg-teal-700 disabled:opacity-50 transition-colors">
+        {syncing ? "Sincronizando con BCRA…" : "↻ Sincronizar desde API del BCRA"}
+      </button>
+
+      {/* Carga manual */}
+      <div className="grid grid-cols-3 gap-3">
+        <Field label="Tipo">
+          <Select value={tipo} onChange={e => setTipo(e.target.value)}>
+            <option value="ICL">ICL</option>
+            <option value="IPC">IPC</option>
+          </Select>
+        </Field>
+        <Field label="Período">
+          <Input type="month" value={periodo} onChange={e => setPeriodo(e.target.value)} />
+        </Field>
+        <Field label="Valor">
+          <Input type="number" step="0.01" placeholder="Ej: 1234.56" value={valor}
+            onChange={e => setValor(e.target.value)} />
+        </Field>
+      </div>
+      <button onClick={saveManual}
+        className="w-full py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors">
+        Guardar valor manual
+      </button>
+
+      {status && (
+        <p className={`text-sm ${status.ok ? "text-teal-600 dark:text-teal-400" : "text-red-600 dark:text-red-400"}`}>
+          {status.msg}
+        </p>
+      )}
+    </div>
+  );
+}

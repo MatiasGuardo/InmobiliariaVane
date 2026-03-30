@@ -9,6 +9,27 @@
 //    import "./cron.js";
 // ============================================================
 
+// ─── Sincronización diaria de índices ────────────────────────
+async function sincronizarIndices() {
+  try {
+    log("Sincronizando índices BCRA…");
+    const res = await fetch("http://localhost:3001/api/indices/sync", {
+      method: "POST",
+    });
+    const data = await res.json();
+    log(`Índices sincronizados — ICL: ${data.ICL}, IPC: ${data.IPC}`);
+    if (data.errores?.length) warn(`Errores sync: ${data.errores.join(", ")}`);
+  } catch (e) {
+    warn(`No se pudieron sincronizar índices: ${e.message}`);
+  }
+}
+
+// Registro del cron — primero sincroniza índices, después evalúa contratos
+cron.schedule("0 8 * * *", async () => {
+  await sincronizarIndices();
+  await evaluarActualizacionesContratos();
+}, { scheduled: true, timezone: "America/Argentina/Buenos_Aires" });
+
 import cron from "node-cron";
 import { pool } from "./db.js";
 import { calcularMontoProyectado, calcularProximaActualizacion } from "./services/rentCalc.js";

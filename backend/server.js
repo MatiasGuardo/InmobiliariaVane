@@ -95,4 +95,8 @@ app.get("/api/health", (_req, res) => res.json({ status: "ok", ts: new Date() })
 // ─── START ────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`🚀  PropManager API corriendo en http://localhost:${PORT}`);
+ 
 });
+import indicesRouter from "./routes/indices.js";
+// ...
+app.use("/api/indices", indicesRouter);
