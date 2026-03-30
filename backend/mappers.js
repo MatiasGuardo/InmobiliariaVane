@@ -1,3 +1,11 @@
+// ============================================================
+//  backend/mappers.js  —  VERSIÓN ACTUALIZADA
+//  Cambios respecto al original:
+//    • mapLease soporta tipo_ajuste ICL/IPC/FIJO
+//    • Se elimina parseIndiceAjuste (movida a rentCalc.js como parseLegacyIndiceAjuste)
+//    • Se agregan proxima_actualizacion, tipo_ajuste, indice_base* al shape del lease
+// ============================================================
+
 // ─── MAPPERS: transforman filas de la BD al formato del frontend ─────────────
 
 export function mapOwner(row) {
@@ -32,38 +40,63 @@ export function mapProperty(row) {
   };
 }
 
-// Parsea el campo indice_ajuste de la BD y devuelve { increase, period }
-// Formato guardado: "10% trimestral" | "5% semestral" | "6% anual"
-function parseIndiceAjuste(indice) {
-  if (!indice) return { increase: 6, period: "anual" };
-  const match = String(indice).match(/^([\d.]+)%?\s*(trimestral|semestral|anual)?/i);
-  if (!match) return { increase: 6, period: "anual" };
-  return {
-    increase: Number(match[1]) || 6,
-    period:   (match[2] || "anual").toLowerCase(),
-  };
-}
-
+// ─── mapLease — soporta FIJO | ICL | IPC ─────────────────────
 export function mapLease(row) {
-  const { increase, period } = parseIndiceAjuste(row.indice_ajuste);
+  // ── Compatibilidad con filas viejas que solo tenían indice_ajuste (string) ──
+  // Si la columna nueva tipo_ajuste no existe aún (filas legacy), inferimos FIJO
+  const tipoAjuste = row.tipo_ajuste ?? "FIJO";
+
+  // Para tipo FIJO usamos porcentaje_ajuste o caemos al legado
+  let increase = Number(row.porcentaje_ajuste ?? 0);
+  let period   = row.periodo_ajuste ?? "anual";
+
+  // Fallback: parseo del string legado "10% trimestral" si las nuevas columnas son null
+  if (tipoAjuste === "FIJO" && !row.porcentaje_ajuste && row.indice_ajuste) {
+    const match = String(row.indice_ajuste).match(/^([\d.]+)%?\s*(trimestral|semestral|anual)?/i);
+    if (match) {
+      increase = Number(match[1]) || 6;
+      period   = (match[2] || "anual").toLowerCase();
+    }
+  }
+
   return {
     id:         String(row.id),
     propertyId: String(row.propiedad_id),
     tenantId:   String(row.inquilino_id),
-    startDate:  row.fecha_inicio instanceof Date
-                  ? row.fecha_inicio.toISOString().split("T")[0]
-                  : String(row.fecha_inicio),
-    endDate:    row.fecha_fin instanceof Date
-                  ? row.fecha_fin.toISOString().split("T")[0]
-                  : String(row.fecha_fin),
+    startDate:  _fmtDate(row.fecha_inicio),
+    endDate:    _fmtDate(row.fecha_fin),
     rent:       Number(row.monto_renta),
-    increase,
-    period,
-    status:     row.estado_contrato === "activo" ? "activo" : row.estado_contrato,
+
+    // ── Ajuste ──
+    tipoAjuste,                                        // "FIJO" | "ICL" | "IPC"
+    increase,                                          // solo relevante para FIJO
+    period,                                            // trimestral | semestral | anual
+
+    // ── Índice base (snapshot al firmar) ──
+    indiceBaseFecha: row.indice_base_fecha
+      ? _fmtDate(row.indice_base_fecha)
+      : null,
+    indiceBaseValor: row.indice_base_valor
+      ? parseFloat(row.indice_base_valor)
+      : null,
+
+    // ── Próxima actualización ──
+    proximaActualizacion: row.proxima_actualizacion
+      ? _fmtDate(row.proxima_actualizacion)
+      : null,
+
+    status: row.estado_contrato === "activo" ? "activo" : row.estado_contrato,
   };
 }
 
-// Traduce tipo del frontend al ENUM de la BD
+// ─── Helpers privados ─────────────────────────────────────────
+function _fmtDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString().split("T")[0];
+  return String(value).slice(0, 10); // "YYYY-MM-DD HH:MM:SS" → "YYYY-MM-DD"
+}
+
+// ─── Traduce tipo del frontend al ENUM de la BD ───────────────
 export function mapTipoDB(tipo) {
   const m = {
     "Departamento":    "departamento",
@@ -76,7 +109,7 @@ export function mapTipoDB(tipo) {
   return m[tipo] || "otro";
 }
 
-// Traduce tipo de la BD al formato del frontend
+// ─── Traduce tipo de la BD al formato del frontend ───────────
 export function mapTipo(tipo) {
   const m = {
     departamento:    "Departamento",
@@ -90,7 +123,7 @@ export function mapTipo(tipo) {
   return m[tipo] || tipo;
 }
 
-// Descompone un nombre completo en nombre + apellido
+// ─── Descompone un nombre completo en nombre + apellido ───────
 export function splitName(fullName) {
   const parts    = fullName.trim().split(" ");
   const apellido = parts.length > 1 ? parts.at(-1) : "";
