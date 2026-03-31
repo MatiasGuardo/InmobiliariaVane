@@ -1,147 +1,311 @@
 // frontend/src/components/leases/IndicesPanel.jsx
-import { useState, useEffect } from "react";
-import { TrendingUp, ChevronRight, Database } from "lucide-react";
-import { Field, Input, Select } from "../ui/FormField";
+import { useState, useEffect, useCallback } from "react";
+import { TrendingUp, ChevronRight, RefreshCw, ExternalLink, Calculator, Check } from "lucide-react";
 import { SyncIndicesButton } from "./ajusteSelector";
+import { AjusteCalculadora } from "./ajusteCalculadora";
 import { API } from "../../utils/helpers";
 
-// ─── Estado actual de los índices en BD ──────────────────────
-function IndicesStatus() {
-  const [status, setStatus] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${API}/api/indices/debug/status`);
-      if (!res.ok) return;
-      const data = await res.json();
-      setStatus(data);
-    } catch {
-      // silencioso
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    load();
-  }, []);
-
-  if (loading) return null;
-  if (!status || status.length === 0) return null;
-
+// ─── Helper ───────────────────────────────────────────────────
+function SmallInput({ label, ...props }) {
   return (
-    <div className="grid grid-cols-2 gap-2">
-      {status.map((row) => (
-        <div
-          key={row.tipo}
-          className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 border border-gray-100 dark:border-gray-600"
-        >
-          <p className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-            {row.tipo}
-          </p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            {row.total} registros
-          </p>
-          <p className="text-xs text-gray-400 dark:text-gray-500">
-            Último: {String(row.ultimo).slice(0, 7)}
-          </p>
-        </div>
-      ))}
+    <div>
+      {label && <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-1 font-medium uppercase tracking-wide">{label}</p>}
+      <input
+        {...props}
+        className="w-full px-2.5 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 transition-all"
+      />
     </div>
   );
 }
 
-// ─── Formulario de carga manual de un valor de índice ────────
-function ManualIndexForm({ onSaved }) {
-  const [tipo, setTipo] = useState("ICL");
-  const [periodo, setPeriodo] = useState("");
-  const [valor, setValor] = useState("");
-  const [status, setStatus] = useState(null);
-  const [saving, setSaving] = useState(false);
+function PeriodSelect({ value, onChange, accentColor = "teal" }) {
+  return (
+    <div>
+      <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-1 font-medium uppercase tracking-wide">Periodicidad</p>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`w-full px-2.5 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 outline-none focus:ring-1 focus:ring-${accentColor}-500 focus:border-${accentColor}-500 transition-all`}
+      >
+        <option value="trimestral">Trimestral</option>
+        <option value="cuatrimestral">Cuatrimestral</option>
+        <option value="semestral">Semestral</option>
+        <option value="anual">Anual</option>
+      </select>
+    </div>
+  );
+}
 
-  const save = async () => {
-    if (!periodo || !valor) return;
+// ─── Tarjeta IPC ──────────────────────────────────────────────
+function IPCCard({ onDataChange }) {
+  const [rows, setRows]         = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [showCalc, setShowCalc] = useState(false);
+  const [rentaBase, setRentaBase] = useState("");
+  const [periodicidad, setPeriodicidad] = useState("trimestral");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/api/indices/IPC`);
+      if (!res.ok) return;
+      setRows(await res.json());
+    } catch { /* silent */ } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const latest = rows[0];
+
+  return (
+    <div className="flex-1 min-w-0 bg-teal-50 dark:bg-teal-900/10 border border-teal-100 dark:border-teal-800/40 rounded-xl p-4 space-y-3">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="w-6 h-6 bg-teal-500 rounded-lg flex items-center justify-center text-white text-[10px] font-bold">%</span>
+          <p className="text-sm font-bold text-gray-700 dark:text-gray-200">IPC</p>
+        </div>
+        <span className="text-[10px] text-teal-600 dark:text-teal-500 bg-teal-100 dark:bg-teal-900/30 px-2 py-0.5 rounded-full font-medium">
+          Auto · BCRA
+        </span>
+      </div>
+
+      {/* Value */}
+      {loading ? (
+        <div className="flex items-center gap-1.5 py-1">
+          <RefreshCw size={11} className="animate-spin text-gray-400" />
+          <span className="text-xs text-gray-400">Cargando…</span>
+        </div>
+      ) : latest ? (
+        <div className="flex items-end gap-2">
+          <p className="text-3xl font-extrabold text-teal-600 dark:text-teal-400 leading-none">
+            {latest.valor?.toFixed(2)}
+            <span className="text-lg font-bold">%</span>
+          </p>
+          <div className="pb-1">
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">variación mensual</p>
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">{latest.periodo?.slice(0, 7)}</p>
+          </div>
+        </div>
+      ) : (
+        <p className="text-xs text-amber-600 dark:text-amber-400">Sin datos — sincronizá</p>
+      )}
+
+      {/* Sync */}
+      <SyncIndicesButton
+        onSuccess={() => { load(); onDataChange?.(); }}
+        compact
+      />
+
+      {/* Calculator toggle */}
+      <button
+        type="button"
+        onClick={() => setShowCalc((v) => !v)}
+        className="flex items-center gap-1.5 text-xs text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 transition-colors font-medium"
+      >
+        <Calculator size={11} />
+        {showCalc ? "Ocultar calculadora" : "Abrir calculadora"}
+      </button>
+
+      {/* Calculator */}
+      {showCalc && (
+        <div className="space-y-2 pt-2 border-t border-teal-100 dark:border-teal-800/40">
+          <div className="grid grid-cols-2 gap-2">
+            <SmallInput
+              label="Renta base ($)"
+              type="number"
+              placeholder="350000"
+              value={rentaBase}
+              onChange={(e) => setRentaBase(e.target.value)}
+            />
+            <PeriodSelect value={periodicidad} onChange={setPeriodicidad} accentColor="teal" />
+          </div>
+
+          {rentaBase && latest ? (
+            <AjusteCalculadora
+              tipoAjuste="IPC"
+              periodicidad={periodicidad}
+              rentaBase={rentaBase}
+              ipcRows={rows}
+            />
+          ) : (
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 italic pl-1">
+              Ingresá una renta base para ver la proyección.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Tarjeta ICL ──────────────────────────────────────────────
+function ICLCard({ onDataChange }) {
+  const [lastSaved, setLastSaved]   = useState(null);
+  const [desde, setDesde]           = useState("");
+  const [hasta, setHasta]           = useState("");
+  const [variacion, setVariacion]   = useState("");
+  const [rentaBase, setRentaBase]   = useState("");
+  const [periodicidad, setPeriodicidad] = useState("trimestral");
+  const [showCalc, setShowCalc]     = useState(false);
+  const [saving, setSaving]         = useState(false);
+  const [saved, setSaved]           = useState(null);
+
+  const loadLast = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/indices/ICL`);
+      if (!res.ok) return;
+      const rows = await res.json();
+      if (rows?.[0]) setLastSaved(rows[0]);
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => { loadLast(); }, [loadLast]);
+
+  const saveICL = async () => {
+    if (!hasta || !variacion) return;
     setSaving(true);
-    setStatus(null);
+    setSaved(null);
     try {
       const res = await fetch(`${API}/api/indices`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tipo, periodo, valor: parseFloat(valor) }),
+        body: JSON.stringify({ tipo: "ICL", periodo: hasta, valor: parseFloat(variacion) }),
       });
       if (!res.ok) throw new Error(await res.text());
-      setStatus({
-        ok: true,
-        msg: `✓ ${tipo} ${periodo.slice(0, 7)} = ${valor} guardado`,
-      });
-      setValor("");
-      onSaved?.();
+      setSaved({ ok: true, msg: `✓ ICL ${hasta.slice(0, 7)} = ${variacion}% guardado` });
+      await loadLast();
+      onDataChange?.();
     } catch (e) {
-      setStatus({ ok: false, msg: e.message });
+      setSaved({ ok: false, msg: `Error: ${e.message}` });
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="space-y-3">
-      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-        Carga manual de valor
-      </p>
-      <div className="grid grid-cols-3 gap-3">
-        <Field label="Tipo">
-          <Select value={tipo} onChange={(e) => setTipo(e.target.value)}>
-            <option value="ICL">ICL</option>
-            <option value="IPC">IPC</option>
-          </Select>
-        </Field>
-        <Field label="Período">
-          <Input
-            type="month"
-            value={periodo}
-            onChange={(e) => setPeriodo(e.target.value)}
-          />
-        </Field>
-        <Field label="Valor">
-          <Input
-            type="number"
-            step="0.01"
-            placeholder="1234.56"
-            value={valor}
-            onChange={(e) => setValor(e.target.value)}
-          />
-        </Field>
+    <div className="flex-1 min-w-0 bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-800/40 rounded-xl p-4 space-y-3">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="w-6 h-6 bg-amber-500 rounded-lg flex items-center justify-center text-white text-[10px] font-bold">↗</span>
+          <p className="text-sm font-bold text-gray-700 dark:text-gray-200">ICL</p>
+        </div>
+        <span className="text-[10px] text-amber-600 dark:text-amber-500 bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 rounded-full font-medium">
+          Manual · BCRA
+        </span>
       </div>
-      <button
-        onClick={save}
-        disabled={saving || !periodo || !valor}
-        className="w-full py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors"
+
+      {/* Last saved value */}
+      {lastSaved ? (
+        <div className="flex items-end gap-2">
+          <p className="text-3xl font-extrabold text-amber-600 dark:text-amber-400 leading-none">
+            {lastSaved.valor?.toFixed(2)}
+            <span className="text-lg font-bold">%</span>
+          </p>
+          <div className="pb-1 flex items-center gap-1">
+            <Check size={10} className="text-emerald-500" />
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">
+              último guardado · {lastSaved.periodo?.slice(0, 7)}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <p className="text-xs text-gray-400 dark:text-gray-500">Sin datos cargados aún</p>
+      )}
+
+      {/* BCRA Link */}
+      <a
+        href="https://www.bcra.gob.ar/PublicacionesEstadisticas/index_icl.asp"
+        target="_blank"
+        rel="noreferrer"
+        className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors"
       >
-        {saving ? "Guardando…" : "Guardar valor manual"}
-      </button>
-      {status && (
-        <p
-          className={`text-xs ${
-            status.ok
-              ? "text-emerald-600 dark:text-emerald-400"
-              : "text-red-500 dark:text-red-400"
-          }`}
+        <ExternalLink size={11} />
+        Consultar calculadora ICL en el BCRA
+      </a>
+      <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-relaxed -mt-1">
+        Seleccioná el rango de fechas en la página del BCRA, copiá el porcentaje obtenido
+        e ingresalo abajo.
+      </p>
+
+      {/* Form */}
+      <div className="space-y-2">
+        <div className="grid grid-cols-2 gap-2">
+          <SmallInput label="Desde" type="month" value={desde} onChange={(e) => setDesde(e.target.value)} />
+          <SmallInput label="Hasta" type="month" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+        </div>
+        <SmallInput
+          label="Variación ICL obtenida (%)"
+          type="number"
+          step="0.01"
+          placeholder="Ej: 112.54"
+          value={variacion}
+          onChange={(e) => setVariacion(e.target.value)}
+        />
+        <button
+          type="button"
+          onClick={saveICL}
+          disabled={saving || !hasta || !variacion}
+          className="w-full py-2 text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white rounded-xl disabled:opacity-50 transition-colors"
         >
-          {status.msg}
-        </p>
+          {saving ? "Guardando…" : "Guardar valor ICL"}
+        </button>
+        {saved && (
+          <p className={`text-[10px] ${saved.ok ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`}>
+            {saved.msg}
+          </p>
+        )}
+      </div>
+
+      {/* Calculator toggle */}
+      <button
+        type="button"
+        onClick={() => setShowCalc((v) => !v)}
+        className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors font-medium"
+      >
+        <Calculator size={11} />
+        {showCalc ? "Ocultar calculadora" : "Abrir calculadora"}
+      </button>
+
+      {/* Calculator */}
+      {showCalc && (
+        <div className="space-y-2 pt-2 border-t border-amber-100 dark:border-amber-800/40">
+          <div className="grid grid-cols-2 gap-2">
+            <SmallInput
+              label="Renta base ($)"
+              type="number"
+              placeholder="350000"
+              value={rentaBase}
+              onChange={(e) => setRentaBase(e.target.value)}
+            />
+            <PeriodSelect value={periodicidad} onChange={setPeriodicidad} accentColor="amber" />
+          </div>
+
+          {rentaBase && variacion ? (
+            <AjusteCalculadora
+              tipoAjuste="ICL"
+              periodicidad={periodicidad}
+              rentaBase={rentaBase}
+              variacionManual={variacion}
+            />
+          ) : (
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 italic pl-1">
+              Ingresá renta base y variación ICL para ver la proyección.
+            </p>
+          )}
+        </div>
       )}
     </div>
   );
 }
 
-// ─── Panel colapsable de gestión de índices ───────────────────
+// ─── Panel principal ──────────────────────────────────────────
 export function IndicesPanel() {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen]           = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-
-  const handleSuccess = () => setRefreshKey((k) => k + 1);
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
@@ -156,32 +320,22 @@ export function IndicesPanel() {
         </span>
         <ChevronRight
           size={15}
-          className={`text-gray-400 transition-transform ${open ? "rotate-90" : ""}`}
+          className={`text-gray-400 transition-transform duration-200 ${open ? "rotate-90" : ""}`}
         />
       </button>
 
       {open && (
-        <div className="px-5 pb-5 space-y-4 border-t border-gray-100 dark:border-gray-700 pt-4">
+        <div className="px-5 pb-5 border-t border-gray-100 dark:border-gray-700 pt-4 space-y-4">
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Los índices se sincronizan automáticamente todos los días a las
-            08:00 hs. Podés forzar la sincronización manual ahora.
+            El <strong>IPC</strong> se sincroniza automáticamente todos los días a las 08:00 hs.
+            El <strong>ICL</strong> se ingresa manualmente consultando la calculadora oficial del BCRA.
           </p>
 
-          {/* Estado actual */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-1.5">
-              <Database size={12} className="text-gray-400" />
-              <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">
-                Datos en base de datos
-              </p>
-            </div>
-            <IndicesStatus key={refreshKey} />
+          {/* Cards side by side */}
+          <div className="flex gap-3 flex-col sm:flex-row">
+            <IPCCard key={`ipc-${refreshKey}`} onDataChange={() => setRefreshKey((k) => k + 1)} />
+            <ICLCard key={`icl-${refreshKey}`} onDataChange={() => setRefreshKey((k) => k + 1)} />
           </div>
-
-          <SyncIndicesButton onSuccess={handleSuccess} />
-
-          <div className="h-px bg-gray-100 dark:bg-gray-700" />
-          <ManualIndexForm onSaved={handleSuccess} />
         </div>
       )}
     </div>
