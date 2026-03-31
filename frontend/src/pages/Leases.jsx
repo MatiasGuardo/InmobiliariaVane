@@ -11,7 +11,7 @@ const TABS = ["activo", "vencido", "rescindido", "renovado", "todos"];
 
 const EMPTY_FORM = {
   propertyId: "", tenantId: "", startDate: "", endDate: "", rent: "",
-  tipoAjuste: "FIJO", increase: "6", period: "anual", status: "activo",
+  tipoAjuste: "FIJO", increase: "6", iclVariacion: "", period: "anual", status: "activo",
 };
 
 export function Leases({ properties, setProperties, owners, tenants, leases, setLeases, initialTab = "activo" }) {
@@ -55,9 +55,10 @@ export function Leases({ properties, setProperties, owners, tenants, leases, set
       endDate:    l.endDate    ?? "",
       rent:       String(l.rent),
       tipoAjuste: l.tipoAjuste ?? "FIJO",
-      increase:   String(l.increase ?? 6),
-      period:     l.period     ?? "anual",
-      status:     l.status     ?? "activo",
+      increase:     String(l.increase ?? 6),
+      iclVariacion: String(l.indiceBaseValor ?? ""),
+      period:       l.period     ?? "anual",
+      status:       l.status     ?? "activo",
     });
     setFormErr("");
     setModal(true);
@@ -88,15 +89,16 @@ export function Leases({ properties, setProperties, owners, tenants, leases, set
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          propertyId: form.propertyId,
-          tenantId:   form.tenantId,
-          startDate:  form.startDate,
-          endDate:    form.endDate,
-          rent:       Number(form.rent),
-          tipoAjuste: form.tipoAjuste,
-          increase:   form.tipoAjuste === "FIJO" ? Number(form.increase) : 0,
-          period:     form.period,
-          status:     form.status,
+          propertyId:   form.propertyId,
+          tenantId:     form.tenantId,
+          startDate:    form.startDate,
+          endDate:      form.endDate,
+          rent:         Number(form.rent),
+          tipoAjuste:   form.tipoAjuste,
+          increase:     form.tipoAjuste === "FIJO" ? Number(form.increase) : 0,
+          iclVariacion: form.tipoAjuste === "ICL"  ? form.iclVariacion : undefined,
+          period:       form.period,
+          status:       form.status,
         }),
       });
       if (!res.ok) {

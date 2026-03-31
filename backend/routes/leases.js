@@ -55,7 +55,8 @@ router.post("/", async (req, res) => {
     // Ajuste
     tipoAjuste = "FIJO",   // "FIJO" | "ICL" | "IPC"
     increase,              // solo para FIJO
-    period = "anual",      // trimestral | semestral | anual
+    iclVariacion,          // % por período para ICL (ingresado manualmente)
+    period = "anual",      // trimestral | cuatrimestral | semestral | anual
   } = req.body;
 
   if (!propertyId || !tenantId || !startDate || !endDate || !rent)
@@ -70,14 +71,21 @@ router.post("/", async (req, res) => {
     );
     if (!prop) throw new Error("Propiedad no encontrada");
 
-    // ── Índice base para ICL/IPC ──
+    // ── Índice base ──
+    // ICL: el usuario ingresa la variación manualmente → se guarda directamente como porcentaje
+    // IPC: necesita el valor histórico base para comparar al momento del ajuste
     let indiceBaseValor = null;
     let indiceBaseFecha = null;
-    if (tipoAjuste === "ICL" || tipoAjuste === "IPC") {
-      indiceBaseValor = await getIndiceBase(conn, tipoAjuste, startDate);
+    if (tipoAjuste === "ICL") {
+      if (!iclVariacion || isNaN(parseFloat(iclVariacion)))
+        throw new Error("Ingresá la variación ICL por período para continuar.");
+      indiceBaseValor = parseFloat(iclVariacion);
+      indiceBaseFecha = startDate.slice(0, 7) + "-01";
+    } else if (tipoAjuste === "IPC") {
+      indiceBaseValor = await getIndiceBase(conn, "IPC", startDate);
       if (!indiceBaseValor) throw new Error(
-        `No se encontró valor de ${tipoAjuste} para la fecha ${startDate}. ` +
-        `Verificá que haya datos en indices_historicos.`
+        `No se encontró valor de IPC para la fecha ${startDate}. ` +
+        `Sincronizá los índices desde el panel de índices.`
       );
       indiceBaseFecha = startDate.slice(0, 7) + "-01";
     }
@@ -187,6 +195,7 @@ router.put("/:id", async (req, res) => {
     propertyId, tenantId, startDate, endDate, rent,
     tipoAjuste = "FIJO",
     increase,
+    iclVariacion,
     period = "anual",
     status,
   } = req.body;
@@ -205,10 +214,15 @@ router.put("/:id", async (req, res) => {
 
     let indiceBaseValor = null;
     let indiceBaseFecha = null;
-    if (tipoAjuste === "ICL" || tipoAjuste === "IPC") {
-      indiceBaseValor = await getIndiceBase(conn, tipoAjuste, startDate);
+    if (tipoAjuste === "ICL") {
+      if (!iclVariacion || isNaN(parseFloat(iclVariacion)))
+        throw new Error("Ingresá la variación ICL por período para continuar.");
+      indiceBaseValor = parseFloat(iclVariacion);
+      indiceBaseFecha = startDate.slice(0, 7) + "-01";
+    } else if (tipoAjuste === "IPC") {
+      indiceBaseValor = await getIndiceBase(conn, "IPC", startDate);
       if (!indiceBaseValor) throw new Error(
-        `No se encontró valor de ${tipoAjuste} para la fecha ${startDate}.`
+        `No se encontró valor de IPC para la fecha ${startDate}. Sincronizá los índices.`
       );
       indiceBaseFecha = startDate.slice(0, 7) + "-01";
     }
