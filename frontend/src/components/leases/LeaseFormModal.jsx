@@ -82,6 +82,9 @@ export function LeaseFormModal({
             onPeriod={v  => setForm({ ...form, period: v })}
             increase={form.increase}
             onIncrease={v => setForm({ ...form, increase: v })}
+            iclVariacion={form.iclVariacion ?? ""}
+            onIclVariacion={v => setForm({ ...form, iclVariacion: v })}
+            rentaBase={form.rent}
           />
         </div>
 

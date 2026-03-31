@@ -276,96 +276,123 @@ export function AjusteSelector({
         </Field>
       )}
 
-      {/* ── Estado ICL / IPC ── */}
-      {tipoAjuste !== "FIJO" && (
-        <div className="space-y-2">
-          {/* Info pill */}
+      {/* ── ICL ── */}
+      {tipoAjuste === "ICL" && (
+        <div className="space-y-3">
+          {/* Info pill azul */}
           <div className="flex gap-2.5 p-3.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl">
             <Info size={15} className="text-blue-500 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-0.5">Ajuste por {tipoAjuste}</p>
-              <p className="text-xs text-blue-600 dark:text-blue-400">{descriptions[tipoAjuste]}</p>
+            <div className="flex-1">
+              <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-0.5">Ajuste por ICL</p>
+              <p className="text-xs text-blue-600 dark:text-blue-400 mb-2">{descriptions.ICL}</p>
+              <a
+                href="https://www.bcra.gob.ar/calculadora-icl"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                <ExternalLink size={11} />
+                Consultá la variación ICL en el BCRA
+              </a>
             </div>
           </div>
 
+          {/* Input variación */}
+          <Field label="Variación ICL por período (%)">
+            <Input
+              type="text"
+              inputMode="decimal"
+              placeholder="Ej: 85.32"
+              value={iclVariacion}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === "" || /^-?\d*[.,]?\d*$/.test(val)) {
+                  onIclVariacion?.(val.replace(",", "."));
+                }
+              }}
+            />
+          </Field>
+
+          {/* Calculadora inline — aparece apenas hay renta + variación */}
+          {rentaBase && parseFloat(rentaBase) > 0 && parseFloat(iclVariacion) > 0 && (
+            <div className="border border-amber-100 dark:border-amber-800/40 rounded-xl overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-50 dark:bg-amber-900/20">
+                <Calculator size={12} className="text-amber-500" />
+                <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">Proyección de ajustes</p>
+              </div>
+              <div className="p-4">
+                <AjusteCalculadora
+                  tipoAjuste="ICL"
+                  periodicidad={period}
+                  rentaBase={rentaBase}
+                  variacionManual={iclVariacion}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── IPC ── */}
+      {tipoAjuste === "IPC" && (
+        <div className="space-y-3">
           {/* Loading */}
           {loading && (
             <p className="text-xs text-gray-400 flex items-center gap-1.5 pl-1">
-              <RefreshCw size={12} className="animate-spin" /> Verificando valores de {tipoAjuste}…
+              <RefreshCw size={12} className="animate-spin" /> Verificando valores de IPC…
             </p>
           )}
 
-          {/* ICL: siempre muestra entrada manual + link BCRA */}
-          {!loading && tipoAjuste === "ICL" && (
-            <div className="space-y-2.5 p-3.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl">
-              {/* Last value if any */}
-              {hasData && latest && (
-                <div className="flex items-center gap-2 pb-2 border-b border-amber-200 dark:border-amber-700">
-                  <Check size={12} className="text-emerald-500" />
-                  <p className="text-xs text-amber-700 dark:text-amber-400">
-                    Último ICL guardado:{" "}
-                    <strong>{latest.valor?.toFixed(2)}%</strong>{" "}
-                    ({fmtPeriodo(latest.periodo)})
-                  </p>
-                </div>
-              )}
-
-              <p className="text-xs text-amber-700 dark:text-amber-400">
-                Consultá la variación ICL para el período del contrato en:
-              </p>
-              <a
-                href="https://www.bcra.gob.ar/PublicacionesEstadisticas/index_icl.asp"
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400 hover:underline"
-              >
-                <ExternalLink size={11} />
-                Calculadora ICL · BCRA
-              </a>
-
-              <Field label="Variación ICL por período (%)">
-                <Input
-                  type="number"
-                  step="0.01"
-                  placeholder="Ej: 85.32"
-                  value={iclVariacion}
-                  onChange={(e) => onIclVariacion?.(e.target.value)}
-                />
-              </Field>
-
-              {!hasData && <SinDatosFallback tipo="ICL" onSuccess={reload} />}
-            </div>
-          )}
-
-          {/* IPC: valor automático */}
-          {!loading && tipoAjuste === "IPC" && !error && (
+          {!loading && !error && (
             <>
-              {hasData ? (
-                <div className="flex items-center gap-2.5 p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl">
-                  <Check size={14} className="text-emerald-500 flex-shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-                      Valor base disponible:{" "}
-                      <span className="font-bold">{latest?.valor?.toLocaleString("es-AR", { minimumFractionDigits: 2 })}%</span>
+              {/* Info pill azul con valor si hay datos */}
+              <div className="flex gap-2.5 p-3.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl">
+                <Info size={15} className="text-blue-500 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-0.5">Ajuste por IPC</p>
+                  <p className="text-xs text-blue-600 dark:text-blue-400">{descriptions.IPC}</p>
+                  {hasData && latest && (
+                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                      Último valor:{" "}
+                      <strong>{latest.valor?.toLocaleString("es-AR", { minimumFractionDigits: 2 })}%</strong>
+                      {" "}· {fmtPeriodo(latest.periodo)}
                     </p>
-                    <p className="text-xs text-emerald-600 dark:text-emerald-400">
-                      Período: {fmtPeriodo(latest?.periodo)} · Se usará como referencia al firmar
-                    </p>
-                  </div>
+                  )}
+                </div>
+                {hasData && (
                   <button type="button" onClick={reload} title="Recargar"
-                    className="p-1.5 rounded-lg text-emerald-500 hover:bg-emerald-100 dark:hover:bg-emerald-800/40 transition-colors">
+                    className="p-1.5 rounded-lg text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-800/40 transition-colors self-start">
                     <RefreshCw size={11} />
                   </button>
+                )}
+              </div>
+
+              {!hasData && <SinDatosFallback tipo="IPC" onSuccess={reload} />}
+
+              {hasData && <SyncIndicesButton onSuccess={reload} compact />}
+
+              {/* Calculadora inline — aparece apenas hay renta y datos IPC */}
+              {rentaBase && parseFloat(rentaBase) > 0 && hasData && (
+                <div className="border border-teal-100 dark:border-teal-800/40 rounded-xl overflow-hidden">
+                  <div className="flex items-center gap-2 px-4 py-2.5 bg-teal-50 dark:bg-teal-900/20">
+                    <Calculator size={12} className="text-teal-500" />
+                    <p className="text-xs font-semibold text-teal-700 dark:text-teal-400">Proyección de ajustes</p>
+                  </div>
+                  <div className="p-4">
+                    <AjusteCalculadora
+                      tipoAjuste="IPC"
+                      periodicidad={period}
+                      rentaBase={rentaBase}
+                      ipcRows={ipcRows}
+                    />
+                  </div>
                 </div>
-              ) : (
-                <SinDatosFallback tipo="IPC" onSuccess={reload} />
               )}
-              <SyncIndicesButton onSuccess={reload} compact />
             </>
           )}
 
           {/* IPC error */}
-          {!loading && tipoAjuste === "IPC" && error && (
+          {!loading && error && (
             <div className="flex items-start gap-2.5 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
               <AlertTriangle size={14} className="text-red-500 flex-shrink-0 mt-0.5" />
               <div className="space-y-1.5">
@@ -377,8 +404,8 @@ export function AjusteSelector({
         </div>
       )}
 
-      {/* ── Calculadora de proyección ── */}
-      {canShowCalc && (
+      {/* ── FIJO: calculadora ── */}
+      {canShowCalc && tipoAjuste === "FIJO" && (
         <div className="border border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden">
           <button
             type="button"
@@ -394,33 +421,17 @@ export function AjusteSelector({
               className={`text-gray-400 transition-transform duration-200 ${showCalc ? "rotate-180" : ""}`}
             />
           </button>
-
           {showCalc && (
             <div className="p-4">
               <AjusteCalculadora
-                tipoAjuste={tipoAjuste}
+                tipoAjuste="FIJO"
                 periodicidad={period}
                 rentaBase={rentaBase}
-                ipcRows={tipoAjuste === "IPC" ? ipcRows : []}
-                variacionManual={
-                  tipoAjuste === "FIJO" ? increase :
-                  tipoAjuste === "ICL"  ? iclVariacion : 0
-                }
+                variacionManual={increase}
               />
             </div>
           )}
         </div>
-      )}
-
-      {/* Hint cuando falta info para la calculadora */}
-      {!canShowCalc && rentaBase && parseFloat(rentaBase) > 0 && tipoAjuste !== "FIJO" && (
-        <p className="text-[10px] text-gray-400 dark:text-gray-500 flex items-center gap-1.5 pl-1">
-          <Calculator size={10} />
-          {tipoAjuste === "ICL"
-            ? "Ingresá la variación ICL para ver la proyección de ajustes."
-            : "Sincronizá el IPC para ver la proyección de ajustes."
-          }
-        </p>
       )}
     </div>
   );

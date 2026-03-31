@@ -1,10 +1,11 @@
 // frontend/src/components/leases/LeaseDetailModal.jsx
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   X, Edit2, Trash2, Calendar, DollarSign,
-  TrendingUp, ChevronRight,
+  TrendingUp, ChevronRight, ChevronDown, BarChart2,
 } from "lucide-react";
 import { Badge }             from "../ui/Badge";
+import { AjusteCalculadora } from "./ajusteCalculadora";
 import { DocumentsSection }  from "../ui/DocumentsSection";
 import { useDocuments }      from "../../hooks/useDocuments";
 import { fmtDate, fmtCurrency, diffDays, getAlertLevel } from "../../utils/helpers";
@@ -19,6 +20,62 @@ export function AjusteBadge({ tipo }) {
     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${map[tipo] || map.FIJO}`}>
       {tipo || "FIJO"}
     </span>
+  );
+}
+
+
+// ─── Proyección de ajuste ─────────────────────────────────
+const COLOR_TIPO = { FIJO: "#6366f1", ICL: "#f59e0b", IPC: "#0d9488" };
+
+function ProyeccionAjuste({ lease }) {
+  const [open, setOpen] = useState(false);
+
+  const tipo         = lease.tipoAjuste ?? "FIJO";
+  const color        = COLOR_TIPO[tipo] ?? "#6366f1";
+  const rentaBase    = lease.rent;
+  const periodicidad = lease.period ?? "anual";
+
+  // Para ICL: indiceBaseValor guarda el % de variación por período
+  const variacionManual = tipo === "ICL" ? (lease.indiceBaseValor ?? 0) : (lease.increase ?? 0);
+
+  // Solo mostrar si hay datos suficientes
+  const canShow = rentaBase > 0 && (
+    (tipo === "FIJO" && variacionManual > 0) ||
+    (tipo === "ICL"  && variacionManual > 0) ||
+    tipo === "IPC"
+  );
+
+  if (!canShow) return null;
+
+  return (
+    <div className="rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-700/40 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition-colors"
+      >
+        <span className="flex items-center gap-2 text-xs font-semibold text-gray-600 dark:text-gray-300">
+          <BarChart2 size={13} style={{ color }} />
+          Proyección de ajustes
+        </span>
+        <ChevronDown
+          size={13}
+          className={`text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {open && (
+        <div className="p-4">
+          <AjusteCalculadora
+            tipoAjuste={tipo}
+            periodicidad={periodicidad}
+            rentaBase={rentaBase}
+            variacionManual={variacionManual}
+            ipcRows={[]}
+          />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -130,6 +187,8 @@ export function LeaseDetailModal({ lease, properties, tenants, owners, onClose, 
               </p>
             </div>
           )}
+
+          <ProyeccionAjuste lease={lease} />
 
           <div className="h-px bg-gray-100 dark:bg-gray-800" />
 
