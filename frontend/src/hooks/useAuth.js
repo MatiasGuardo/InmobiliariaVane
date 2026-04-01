@@ -1,16 +1,8 @@
 import { useState, useCallback, useEffect } from 'react';
 
-/**
- * Hook de Autenticación para InmobiliariaVane
- * 
- * Maneja:
- * - Login con tenant, email, password
- * - Logout
- * - Persistencia de token en localStorage
- * - Validación de token
- */
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+// Con el proxy de Vite configurado, usamos URL relativa.
+// Esto evita cualquier problema de CORS en desarrollo.
+const API_BASE_URL = '/api';
 
 export function useAuth() {
   const [user, setUser] = useState(null);
@@ -19,10 +11,9 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Inicializar desde localStorage
   useEffect(() => {
-    const storedToken = localStorage.getItem('authToken');
-    const storedUser = localStorage.getItem('authUser');
+    const storedToken  = localStorage.getItem('authToken');
+    const storedUser   = localStorage.getItem('authUser');
     const storedTenant = localStorage.getItem('authTenant');
 
     if (storedToken && storedUser && storedTenant) {
@@ -40,10 +31,6 @@ export function useAuth() {
     setLoading(false);
   }, []);
 
-  /**
-   * Login: email + password + tenant
-   * Retorna: { token, usuario, tenantId, tenantNombre }
-   */
   const login = useCallback(async (tenantName, email, password) => {
     setError(null);
     setLoading(true);
@@ -51,20 +38,17 @@ export function useAuth() {
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tenant: tenantName,
-          email,
-          password,
-        }),
+        body: JSON.stringify({ tenant: tenantName, email, password }),
       });
+
+      const text = await response.text();
 
       let data;
       try {
-        data = await response.json();
-      } catch (parseErr) {
-        console.error('Error parsing response:', parseErr);
-        console.error('Response status:', response.status);
-        throw new Error(`Error del servidor (${response.status}): La respuesta no es JSON válido`);
+        data = JSON.parse(text);
+      } catch {
+        console.error('Respuesta no-JSON del servidor:', text.slice(0, 300));
+        throw new Error(`Error del servidor (${response.status}): respuesta inesperada`);
       }
 
       if (!response.ok) {
@@ -73,14 +57,12 @@ export function useAuth() {
 
       const { token: newToken, usuario, tenantId, tenantNombre } = data;
 
-      // Guardar en estado
       setToken(newToken);
       setUser(usuario);
       setTenant({ id: tenantId, nombre: tenantNombre });
 
-      // Guardar en localStorage
-      localStorage.setItem('authToken', newToken);
-      localStorage.setItem('authUser', JSON.stringify(usuario));
+      localStorage.setItem('authToken',  newToken);
+      localStorage.setItem('authUser',   JSON.stringify(usuario));
       localStorage.setItem('authTenant', JSON.stringify({ id: tenantId, nombre: tenantNombre }));
 
       return { token: newToken, usuario, tenantId, tenantNombre };
@@ -93,9 +75,6 @@ export function useAuth() {
     }
   }, []);
 
-  /**
-   * Logout: limpia token y usuario
-   */
   const logout = useCallback(() => {
     setUser(null);
     setTenant(null);
@@ -106,10 +85,6 @@ export function useAuth() {
     localStorage.removeItem('authTenant');
   }, []);
 
-  /**
-   * Register: crea nuevo usuario en un tenant
-   * Body: { tenant, email, password, nombre }
-   */
   const register = useCallback(async (tenantName, email, password, nombre) => {
     setError(null);
     setLoading(true);
@@ -117,68 +92,28 @@ export function useAuth() {
       const response = await fetch(`${API_BASE_URL}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tenant: tenantName,
-          email,
-          password,
-          nombre,
-        }),
+        body: JSON.stringify({ tenant: tenantName, email, password, nombre }),
       });
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Error al registrar');
-      }
-
       const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Error al registrar');
       return data;
     } catch (err) {
-      const errorMsg = err.message || 'Error al registrar';
-      setError(errorMsg);
+      setError(err.message || 'Error al registrar');
       throw err;
     } finally {
       setLoading(false);
     }
   }, []);
 
-  /**
-   * Obtiene el token JWT actual
-   */
-  const getToken = useCallback(() => {
-    return token;
-  }, [token]);
-
-  /**
-   * Verifica si el usuario está autenticado
-   */
-  const isAuthenticated = useCallback(() => {
-    return !!token && !!user;
-  }, [token, user]);
-
-  /**
-   * Retorna headers con Authorization si hay token
-   */
-  const getAuthHeaders = useCallback(() => {
+  const getToken          = useCallback(() => token, [token]);
+  const isAuthenticated   = useCallback(() => !!token && !!user, [token, user]);
+  const getAuthHeaders    = useCallback(() => {
     if (!token) return {};
-    return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    };
+    return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
   }, [token]);
 
-  return {
-    user,
-    tenant,
-    token,
-    loading,
-    error,
-    login,
-    logout,
-    register,
-    getToken,
-    isAuthenticated,
-    getAuthHeaders,
-  };
+  return { user, tenant, token, loading, error, login, logout, register, getToken, isAuthenticated, getAuthHeaders };
 }
 
 export default useAuth;
