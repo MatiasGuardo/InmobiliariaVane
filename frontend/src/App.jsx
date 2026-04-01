@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext } from "react";
+import { useState, createContext } from "react";
 import { Sidebar }       from "./components/layout/Sidebar";
 import { Dashboard }     from "./pages/Dashboard";
 import { Properties }    from "./pages/Properties";
@@ -10,44 +10,51 @@ import { useApi }        from "./hooks/useApi";
 import { useTheme }      from "./hooks/useTheme";
 import { useAlerts }     from "./hooks/useAlerts";
 import { useAuth }       from "./hooks/useAuth";
-import Login            from "./pages/Login";
+import Login             from "./pages/Login";
 
 // AuthContext para acceso global a autenticación
 export const AuthContext = createContext(null);
 
 export default function App() {
-  const [showApp, setShowApp] = useState(false);
   const [active,      setActiveRaw] = useState("dashboard");
   const [propFilter,  setPropFilter] = useState("todos");
   const [leaseFilter, setLeaseFilter] = useState("activo");
   const { dark, toggleDark } = useTheme();
-  
-  const auth = useAuth();
-  
-  // Verificar autenticación al montar la app
-  useEffect(() => {
-    const token = localStorage.getItem('authToken');
-    setShowApp(!!token);
-  }, []);
 
-  // Si no hay autenticación, mostrar login
-  if (!showApp && !auth.user) {
+  // ✅ useAuth siempre se llama primero — incluye loading mientras lee localStorage
+  const auth = useAuth();
+
+  // ✅ Todos los useApi siempre se llaman (regla de hooks: nunca después de un return condicional)
+  // Cuando el usuario no está autenticado, useApi no va a hacer fetch igual
+  // porque el token no existe, pero los hooks deben existir siempre.
+  const { data: properties, setData: setProperties, loading: lProps,   error: eProps,   reload: reloadProps }   = useApi(auth.token ? "/api/properties" : null);
+  const { data: owners,     setData: setOwners,     loading: lOwners,  error: eOwners,  reload: reloadOwners }  = useApi(auth.token ? "/api/owners"     : null);
+  const { data: tenants,    setData: setTenants,    loading: lTenants, error: eTenants, reload: reloadTenants } = useApi(auth.token ? "/api/tenants"    : null);
+  const { data: leases,     setData: setLeases,     loading: lLeases,  error: eLeases,  reload: reloadLeases }  = useApi(auth.token ? "/api/leases"     : null);
+
+  const { badgeCount, dismiss, activeAlerts } = useAlerts(leases);
+
+  // ✅ Esperar a que useAuth termine de leer localStorage antes de decidir qué mostrar
+  if (auth.loading) {
     return (
-      <Login 
-        onLoginSuccess={() => setShowApp(true)}
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="w-10 h-10 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin" />
+      </div>
+    );
+  }
+
+  // ✅ Si no hay sesión, mostrar login
+  if (!auth.user) {
+    return (
+      <Login
+        onLoginSuccess={() => {/* auth.user se actualiza solo vía useAuth */}}
+        auth={auth}
       />
     );
   }
 
-  const { data: properties, setData: setProperties, loading: lProps,   error: eProps,   reload: reloadProps }   = useApi("/api/properties");
-  const { data: owners,     setData: setOwners,     loading: lOwners,  error: eOwners,  reload: reloadOwners }  = useApi("/api/owners");
-  const { data: tenants,    setData: setTenants,    loading: lTenants, error: eTenants, reload: reloadTenants } = useApi("/api/tenants");
-  const { data: leases,     setData: setLeases,     loading: lLeases,  error: eLeases,  reload: reloadLeases }  = useApi("/api/leases");
-
-  const loading = lProps || lOwners || lTenants || lLeases;
-  const error   = eProps || eOwners || eTenants || eLeases;
-
-  const { badgeCount, dismiss, activeAlerts } = useAlerts(leases);
+  const dataLoading = lProps || lOwners || lTenants || lLeases;
+  const dataError   = eProps || eOwners || eTenants || eLeases;
 
   const handleSetActive = (target) => {
     if (typeof target === "string") {
@@ -62,12 +69,11 @@ export default function App() {
 
   const handleLogout = () => {
     auth.logout();
-    setShowApp(false);
   };
 
   const shared = { properties, setProperties, owners, setOwners, tenants, setTenants, leases, setLeases };
 
-  if (loading) {
+  if (dataLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="text-center">
@@ -78,12 +84,12 @@ export default function App() {
     );
   }
 
-  if (error) {
+  if (dataError) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900 p-8">
         <div className="max-w-sm w-full space-y-4">
           <ErrorBox
-            message={error}
+            message={dataError}
             onRetry={() => { reloadProps(); reloadOwners(); reloadTenants(); reloadLeases(); }}
           />
           <p className="text-xs text-gray-400 dark:text-gray-500 text-center">
@@ -98,26 +104,28 @@ export default function App() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50/80 dark:bg-gray-900 font-sans">
-      <Sidebar
-        active={active}
-        setActive={handleSetActive}
-        alertCount={badgeCount}
-        dark={dark}
-        toggleDark={toggleDark}
-        user={auth.user}
-        tenant={auth.tenant}
-        onLogout={handleLogout}
-      />
-      <main className="flex-1 overflow-auto">
-        <div className="max-w-5xl mx-auto px-6 py-8">
-          {active === "dashboard"     && <Dashboard     {...shared} setActive={handleSetActive} activeAlerts={activeAlerts} />}
-          {active === "properties"    && <Properties    {...shared} initialFilter={propFilter} />}
-          {active === "contacts"      && <Contacts      {...shared} />}
-          {active === "leases"        && <Leases        {...shared} initialTab={leaseFilter} />}
-          {active === "notifications" && <Notifications {...shared} activeAlerts={activeAlerts} dismiss={dismiss} setActive={handleSetActive} />}
-        </div>
-      </main>
-    </div>
+    <AuthContext.Provider value={auth}>
+      <div className="flex min-h-screen bg-gray-50/80 dark:bg-gray-900 font-sans">
+        <Sidebar
+          active={active}
+          setActive={handleSetActive}
+          alertCount={badgeCount}
+          dark={dark}
+          toggleDark={toggleDark}
+          user={auth.user}
+          tenant={auth.tenant}
+          onLogout={handleLogout}
+        />
+        <main className="flex-1 overflow-auto">
+          <div className="max-w-5xl mx-auto px-6 py-8">
+            {active === "dashboard"     && <Dashboard     {...shared} setActive={handleSetActive} activeAlerts={activeAlerts} />}
+            {active === "properties"    && <Properties    {...shared} initialFilter={propFilter} />}
+            {active === "contacts"      && <Contacts      {...shared} />}
+            {active === "leases"        && <Leases        {...shared} initialTab={leaseFilter} />}
+            {active === "notifications" && <Notifications {...shared} activeAlerts={activeAlerts} dismiss={dismiss} setActive={handleSetActive} />}
+          </div>
+        </main>
+      </div>
+    </AuthContext.Provider>
   );
 }
