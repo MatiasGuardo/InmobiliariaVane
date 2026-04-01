@@ -71,6 +71,14 @@ router.post("/", async (req, res) => {
     );
     if (!prop) throw new Error("Propiedad no encontrada");
 
+    // Validar que el inquilino tenga email válido
+    const [[tenant]] = await conn.query(
+      "SELECT email FROM personas WHERE id = ? AND activo = 1", [tenantId]
+    );
+    if (!tenant) throw new Error("Inquilino no encontrado");
+    if (!tenant.email || !tenant.email.includes("@"))
+      throw new Error("El inquilino debe tener un email válido para crear un contrato");
+
     // ── Índice base ──
     // ICL: el usuario ingresa la variación manualmente → se guarda directamente como porcentaje
     // IPC: necesita el valor histórico base para comparar al momento del ajuste
@@ -211,6 +219,14 @@ router.put("/:id", async (req, res) => {
       "SELECT id_propietario FROM propiedades WHERE id = ?", [propertyId]
     );
     if (!prop) throw new Error("Propiedad no encontrada");
+
+    // Validar que el inquilino tenga email válido
+    const [[tenant]] = await conn.query(
+      "SELECT email FROM personas WHERE id = ? AND activo = 1", [tenantId]
+    );
+    if (!tenant) throw new Error("Inquilino no encontrado");
+    if (!tenant.email || !tenant.email.includes("@"))
+      throw new Error("El inquilino debe tener un email válido para crear un contrato");
 
     let indiceBaseValor = null;
     let indiceBaseFecha = null;

@@ -69,6 +69,13 @@ export function Leases({ properties, setProperties, owners, tenants, leases, set
   const validate = () => {
     if (!form.propertyId)             return "Seleccioná una propiedad.";
     if (!form.tenantId)               return "Seleccioná un inquilino.";
+    
+    // Validar que el inquilino tenga email válido
+    const tenant = tenants.find(t => t.id === form.tenantId);
+    if (!tenant?.email || !tenant.email.includes("@")) {
+      return "El inquilino debe tener un email válido para crear un contrato.";
+    }
+    
     if (!isValidDate(form.startDate)) return "La fecha de inicio no es válida.";
     if (!isValidDate(form.endDate))   return "La fecha de fin no es válida.";
     if (new Date(form.endDate) <= new Date(form.startDate))

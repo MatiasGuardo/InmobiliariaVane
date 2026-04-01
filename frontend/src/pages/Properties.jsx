@@ -92,6 +92,11 @@ function PropertyDetailModal({ property, owners, leases, tenants, onClose, onEdi
                       <Phone size={11} className="text-gray-400 flex-shrink-0" />{owner.phone}
                     </span>
                   )}
+                  {owner.document && (
+                    <span className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                      <FileText size={11} className="text-gray-400 flex-shrink-0" />{owner.document}
+                    </span>
+                  )}
                 </div>
               </>
             ) : (
@@ -117,6 +122,11 @@ function PropertyDetailModal({ property, owners, leases, tenants, onClose, onEdi
                   {leaseTenant.phone && (
                     <span className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                       <Phone size={11} className="text-gray-400 flex-shrink-0" />{leaseTenant.phone}
+                    </span>
+                  )}
+                  {leaseTenant.document && (
+                    <span className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                      <FileText size={11} className="text-gray-400 flex-shrink-0" />{leaseTenant.document}
                     </span>
                   )}
                 </div>
@@ -267,6 +277,8 @@ export function Properties({ properties, setProperties, owners, leases, tenants,
       <div className="grid gap-3">
         {filtered.map(p => {
           const owner = owners.find(o => o.id === p.ownerId);
+          const activeLease = leases?.find(l => l.propertyId === p.id && l.status === "activo");
+          const tenant = activeLease ? tenants?.find(t => t.id === activeLease.tenantId) : null;
           return (
             <div
               key={p.id}
@@ -281,8 +293,9 @@ export function Properties({ properties, setProperties, owners, leases, tenants,
                   <div className="min-w-0">
                     <p className="font-semibold text-gray-800 dark:text-gray-200 truncate">{p.address}</p>
                     <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{p.type}</p>
-                    <div className="flex items-center gap-3 mt-2 text-xs text-gray-400 dark:text-gray-500">
-                      {owner && <span className="flex items-center gap-1"><User size={11} />{owner.name}</span>}
+                    <div className="flex flex-col gap-1.5 mt-2 text-xs">
+                      {owner && <span className="flex items-center gap-1 text-gray-400 dark:text-gray-500"><span className="font-semibold text-gray-600 dark:text-gray-400">Propietario:</span> {owner.name}</span>}
+                      {tenant && <span className="flex items-center gap-1 text-gray-400 dark:text-gray-500"><span className="font-semibold text-gray-600 dark:text-gray-400">Inquilino:</span> {tenant.name}</span>}
                     </div>
                   </div>
                 </div>
@@ -348,7 +361,7 @@ export function Properties({ properties, setProperties, owners, leases, tenants,
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Precio lista (ARS)">
-              <Input type="number" placeholder="Ej: 320000" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} />
+              <Input type="text" inputMode="decimal" placeholder="Ej: 320000" value={form.price} onChange={e => setForm({ ...form, price: e.target.value.replace(/[^0-9.]/g, '') })} />
             </Field>
             <Field label="Propietario">
               <Select value={form.ownerId} onChange={e => setForm({ ...form, ownerId: e.target.value })}>
