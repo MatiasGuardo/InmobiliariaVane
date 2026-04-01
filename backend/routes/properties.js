@@ -1,19 +1,23 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { mapProperty, mapTipoDB } from "../mappers.js";
+import { authMiddleware } from "../middleware/auth.js";
 
 const router = Router();
 
+// Todas las rutas requieren autenticación
+router.use(authMiddleware);
+
 // GET /api/properties
-router.get("/", async (_req, res) => {
+router.get("/", async (req, res) => {
   try {
     const [rows] = await pool.query(`
       SELECT p.*,
         (SELECT c.id FROM contratos c WHERE c.propiedad_id = p.id AND c.estado_contrato = 'activo' LIMIT 1) AS leaseId
       FROM propiedades p
-      WHERE p.activo = 1
+      WHERE p.activo = 1 AND p.tenant_id = ?
       ORDER BY p.id DESC
-    `);
+    `, [req.user.tenantId]);
     res.json(rows.map(mapProperty));
   } catch (err) {
     console.error(err);
@@ -34,9 +38,9 @@ router.post("/", async (req, res) => {
 
   try {
     const [result] = await pool.query(
-      `INSERT INTO propiedades (id_propietario, direccion, numero, ciudad, codigo_postal, tipo, estado, precio_lista, moneda, activo)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ARS', 1)`,
-      [ownerId, dir, numero, "Buenos Aires", "1000", mapTipoDB(type), estado, price]
+      `INSERT INTO propiedades (tenant_id, id_propietario, direccion, numero, ciudad, codigo_postal, tipo, estado, precio_lista, moneda, activo)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ARS', 1)`,
+      [req.user.tenantId, ownerId, dir, numero, "Buenos Aires", "1000", mapTipoDB(type), estado, price]
     );
     const [[row]] = await pool.query("SELECT p.*, NULL AS leaseId FROM propiedades p WHERE p.id = ?", [result.insertId]);
     res.status(201).json(mapProperty(row));
@@ -57,8 +61,8 @@ router.put("/:id", async (req, res) => {
 
   try {
     await pool.query(
-      `UPDATE propiedades SET direccion = ?, numero = ?, tipo = ?, estado = ?, precio_lista = ?, id_propietario = ? WHERE id = ?`,
-      [dir, numero, mapTipoDB(type), estado, price, ownerId, id]
+      `UPDATE propiedades SET direccion = ?, numero = ?, tipo = ?, estado = ?, precio_lista = ?, id_propietario = ? WHERE id = ? AND tenant_id = ?`,
+      [dir, numero, mapTipoDB(type), estado, price, ownerId, id, req.user.tenantId]
     );
     const [[row]] = await pool.query(
       `SELECT p.*, (SELECT c.id FROM contratos c WHERE c.propiedad_id = p.id AND c.estado_contrato = 'activo' LIMIT 1) AS leaseId FROM propiedades p WHERE p.id = ?`,
@@ -80,8 +84,8 @@ router.delete("/:id", async (req, res) => {
 
     // 1. Obtener todos los contratos de la propiedad
     const [contratos] = await conn.query(
-      "SELECT id FROM contratos WHERE propiedad_id = ?",
-      [req.params.id]
+      "SELECT id FROM contratos WHERE propiedad_id = ? AND tenant_id = ?",
+      [req.params.id, req.user.tenantId]
     );
 
     for (const contrato of contratos) {
@@ -102,7 +106,7 @@ router.delete("/:id", async (req, res) => {
     );
 
     // 5. Dar de baja la propiedad
-    await conn.query("UPDATE propiedades SET activo = 0 WHERE id = ?", [req.params.id]);
+    await conn.query("UPDATE propiedades SET activo = 0 WHERE id = ? AND tenant_id = ?", [req.params.id, req.user.tenantId]);
 
     await conn.commit();
     res.json({ ok: true });

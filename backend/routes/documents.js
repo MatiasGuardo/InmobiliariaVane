@@ -1,7 +1,11 @@
 import { Router } from "express";
 import { pool }    from "../db.js";
+import { authMiddleware } from "../middleware/auth.js";
 
 const router = Router();
+
+// Todas las rutas requieren autenticación
+router.use(authMiddleware);
 
 // GET /api/documents?entityType=lease&entityId=5
 router.get("/", async (req, res) => {
@@ -13,9 +17,9 @@ router.get("/", async (req, res) => {
       `SELECT id, entity_type, entity_id, file_name, mime_type, file_size,
               created_at
        FROM documentos
-       WHERE entity_type = ? AND entity_id = ?
+       WHERE entity_type = ? AND entity_id = ? AND tenant_id = ?
        ORDER BY created_at DESC`,
-      [entityType, entityId]
+      [entityType, entityId, req.user.tenantId]
     );
     res.json(rows);
   } catch (err) {
@@ -28,8 +32,8 @@ router.get("/", async (req, res) => {
 router.get("/:id/file", async (req, res) => {
   try {
     const [[row]] = await pool.query(
-      "SELECT file_name, mime_type, file_data FROM documentos WHERE id = ?",
-      [req.params.id]
+      "SELECT file_name, mime_type, file_data FROM documentos WHERE id = ? AND tenant_id = ?",
+      [req.params.id, req.user.tenantId]
     );
     if (!row) return res.status(404).json({ error: "Documento no encontrado" });
     res.setHeader("Content-Type", row.mime_type);
@@ -62,9 +66,9 @@ router.post("/", async (req, res) => {
 
   try {
     const [result] = await pool.query(
-      `INSERT INTO documentos (entity_type, entity_id, file_name, mime_type, file_size, file_data)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [entityType, entityId, fileName, mimeType, buffer.length, buffer]
+      `INSERT INTO documentos (tenant_id, entity_type, entity_id, file_name, mime_type, file_size, file_data)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [req.user.tenantId, entityType, entityId, fileName, mimeType, buffer.length, buffer]
     );
     res.status(201).json({
       id:          result.insertId,
@@ -84,7 +88,7 @@ router.post("/", async (req, res) => {
 // DELETE /api/documents/:id
 router.delete("/:id", async (req, res) => {
   try {
-    await pool.query("DELETE FROM documentos WHERE id = ?", [req.params.id]);
+    await pool.query("DELETE FROM documentos WHERE id = ? AND tenant_id = ?", [req.params.id, req.user.tenantId]);
     res.json({ ok: true });
   } catch (err) {
     console.error(err);

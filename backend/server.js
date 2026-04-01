@@ -9,6 +9,7 @@ import tenantsRouter    from "./routes/tenants.js";
 import leasesRouter     from "./routes/leases.js";
 import documentsRouter  from "./routes/documents.js";
 import indicesRouter    from "./routes/indices.js";   // ← ERA EL BUG PRINCIPAL
+import authRouter       from "./routes/auth.js";
 
 import "./db.js";
 import "./cron.js";
@@ -37,6 +38,7 @@ app.use("/api/tenants",    tenantsRouter);
 app.use("/api/leases",     leasesRouter);
 app.use("/api/documents",  documentsRouter);
 app.use("/api/indices",    indicesRouter);            // ← ERA EL BUG PRINCIPAL
+app.use("/api/auth",       authRouter);
 
 app.get("/api/alertas", async (_req, res) => {
   try {

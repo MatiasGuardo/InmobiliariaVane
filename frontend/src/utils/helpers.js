@@ -55,3 +55,38 @@ export const getAlertLevel = (days) => {
 // ─── URL BASE DE LA API ───────────────────────────────────────
 
 export const API = import.meta.env.VITE_API_URL || "http://localhost:3001";
+
+// ─── API CALLS CON AUTENTICACIÓN ──────────────────────────────
+/**
+ * Realiza un fetch con token JWT automático
+ * Usa el token almacenado en localStorage si existe
+ */
+export const apiCall = async (endpoint, options = {}) => {
+  const token = localStorage.getItem('authToken');
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${API}${endpoint}`, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    const error = new Error(`HTTP ${response.status}`);
+    error.status = response.status;
+    try {
+      error.data = await response.json();
+    } catch (e) {
+      // No JSON body
+    }
+    throw error;
+  }
+
+  return response.json();
+};

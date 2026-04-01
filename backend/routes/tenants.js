@@ -1,19 +1,23 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { mapTenant, splitName } from "../mappers.js";
+import { authMiddleware } from "../middleware/auth.js";
 
 const router = Router();
 
+// Todas las rutas requieren autenticación
+router.use(authMiddleware);
+
 // GET /api/tenants
-router.get("/", async (_req, res) => {
+router.get("/", async (req, res) => {
   try {
     const [rows] = await pool.query(`
       SELECT pe.*,
         (SELECT c.id FROM contratos c WHERE c.inquilino_id = pe.id AND c.estado_contrato = 'activo' LIMIT 1) AS leaseId
       FROM personas pe
-      WHERE pe.activo = 1 AND pe.tipo_persona IN ('inquilino', 'ambos')
+      WHERE pe.activo = 1 AND pe.tipo_persona IN ('inquilino', 'ambos') AND pe.tenant_id = ?
       ORDER BY pe.apellido, pe.nombre
-    `);
+    `, [req.user.tenantId]);
     res.json(rows.map(mapTenant));
   } catch (err) {
     console.error(err);
@@ -29,9 +33,9 @@ router.post("/", async (req, res) => {
   const { nombre, apellido } = splitName(name);
   try {
     const [result] = await pool.query(
-      `INSERT INTO personas (tipo_persona, nombre, apellido, documento_tipo, documento_nro, telefono, email, activo)
-       VALUES ('inquilino', ?, ?, 'DNI', ?, ?, ?, 1)`,
-      [nombre, apellido, document || null, phone || null, email]
+      `INSERT INTO personas (tenant_id, tipo_persona, nombre, apellido, documento_tipo, documento_nro, telefono, email, activo)
+       VALUES (?, 'inquilino', ?, ?, 'DNI', ?, ?, ?, 1)`,
+      [req.user.tenantId, nombre, apellido, document || null, phone || null, email]
     );
     const [[row]] = await pool.query(
       `SELECT pe.*,
@@ -58,14 +62,14 @@ router.put("/:id", async (req, res) => {
   try {
     await pool.query(
       `UPDATE personas SET nombre = ?, apellido = ?, email = ?, telefono = ?, documento_nro = ?
-       WHERE id = ? AND tipo_persona IN ('inquilino', 'ambos')`,
-      [nombre, apellido, email, phone || null, document || null, id]
+       WHERE id = ? AND tipo_persona IN ('inquilino', 'ambos') AND tenant_id = ?`,
+      [nombre, apellido, email, phone || null, document || null, id, req.user.tenantId]
     );
     const [[row]] = await pool.query(
       `SELECT pe.*,
          (SELECT c.id FROM contratos c WHERE c.inquilino_id = pe.id AND c.estado_contrato = 'activo' LIMIT 1) AS leaseId
-       FROM personas pe WHERE pe.id = ?`,
-      [id]
+       FROM personas pe WHERE pe.id = ? AND pe.tenant_id = ?`,
+      [id, req.user.tenantId]
     );
     res.json(mapTenant(row));
   } catch (err) {
@@ -83,8 +87,8 @@ router.delete("/:id", async (req, res) => {
 
     // 1. Obtener contrato activo del inquilino
     const [contratos] = await conn.query(
-      "SELECT id, propiedad_id FROM contratos WHERE inquilino_id = ? AND estado_contrato = 'activo'",
-      [req.params.id]
+      "SELECT id, propiedad_id FROM contratos WHERE inquilino_id = ? AND estado_contrato = 'activo' AND tenant_id = ?",
+      [req.params.id, req.user.tenantId]
     );
 
     for (const contrato of contratos) {
@@ -105,7 +109,7 @@ router.delete("/:id", async (req, res) => {
     }
 
     // 5. Dar de baja al inquilino
-    await conn.query("UPDATE personas SET activo = 0 WHERE id = ?", [req.params.id]);
+    await conn.query("UPDATE personas SET activo = 0 WHERE id = ? AND tenant_id = ?", [req.params.id, req.user.tenantId]);
 
     await conn.commit();
     res.json({ ok: true });
