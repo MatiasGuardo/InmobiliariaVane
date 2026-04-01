@@ -1,8 +1,12 @@
 import { Router } from "express";
 import { pool, columnExists }    from "../db.js";
 import { mapLease } from "../mappers.js";
+import { authMiddleware } from "../middleware/auth.js";
 
 const router = Router();
+
+// Todas las rutas requieren autenticación
+router.use(authMiddleware);
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -34,13 +38,13 @@ function calcProximaActualizacion(fechaInicio, periodo) {
 }
 
 // ─── GET /api/leases ──────────────────────────────────────────
-router.get("/", async (_req, res) => {
+router.get("/", async (req, res) => {
   try {
     const [rows] = await pool.query(`
       SELECT * FROM contratos
-      WHERE estado_contrato NOT IN ('borrador')
+      WHERE estado_contrato NOT IN ('borrador') AND tenant_id = ?
       ORDER BY fecha_fin ASC
-    `);
+    `, [req.user.tenantId]);
     res.json(rows.map(mapLease));
   } catch (err) {
     console.error(err);
@@ -67,13 +71,13 @@ router.post("/", async (req, res) => {
     await conn.beginTransaction();
 
     const [[prop]] = await conn.query(
-      "SELECT id_propietario FROM propiedades WHERE id = ?", [propertyId]
+      "SELECT id_propietario FROM propiedades WHERE id = ? AND tenant_id = ?", [propertyId, req.user.tenantId]
     );
     if (!prop) throw new Error("Propiedad no encontrada");
 
     // Validar que el inquilino tenga email válido
     const [[tenant]] = await conn.query(
-      "SELECT email FROM personas WHERE id = ? AND activo = 1", [tenantId]
+      "SELECT email FROM personas WHERE id = ? AND activo = 1 AND tenant_id = ?", [tenantId, req.user.tenantId]
     );
     if (!tenant) throw new Error("Inquilino no encontrado");
     if (!tenant.email || !tenant.email.includes("@"))
@@ -118,13 +122,14 @@ router.post("/", async (req, res) => {
     if (hasNewCols) {
       insertQuery = `
         INSERT INTO contratos
-          (propiedad_id, inquilino_id, propietario_id, fecha_inicio, fecha_fin,
+          (tenant_id, propiedad_id, inquilino_id, propietario_id, fecha_inicio, fecha_fin,
            monto_renta, moneda, estado_contrato,
            indice_ajuste,
            tipo_ajuste, periodo_ajuste, porcentaje_ajuste,
            indice_base_fecha, indice_base_valor, proxima_actualizacion)
-        VALUES (?, ?, ?, ?, ?, ?, 'ARS', 'activo', ?, ?, ?, ?, ?, ?, ?)`;
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'ARS', 'activo', ?, ?, ?, ?, ?, ?, ?)`;
       insertParams = [
+        req.user.tenantId,
         propertyId, tenantId, prop.id_propietario,
         startDate, endDate, rent,
         indiceAjuste,
@@ -136,10 +141,11 @@ router.post("/", async (req, res) => {
       // Fallback: solo columnas legacy
       insertQuery = `
         INSERT INTO contratos
-          (propiedad_id, inquilino_id, propietario_id, fecha_inicio, fecha_fin,
+          (tenant_id, propiedad_id, inquilino_id, propietario_id, fecha_inicio, fecha_fin,
            monto_renta, moneda, estado_contrato, indice_ajuste)
-        VALUES (?, ?, ?, ?, ?, ?, 'ARS', 'activo', ?)`;
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'ARS', 'activo', ?)`;
       insertParams = [
+        req.user.tenantId,
         propertyId, tenantId, prop.id_propietario,
         startDate, endDate, rent, indiceAjuste,
       ];
@@ -148,7 +154,7 @@ router.post("/", async (req, res) => {
     const [result] = await conn.query(insertQuery, insertParams);
 
     await conn.query(
-      "UPDATE propiedades SET estado = 'alquilada' WHERE id = ?", [propertyId]
+      "UPDATE propiedades SET estado = 'alquilada' WHERE id = ? AND tenant_id = ?", [propertyId, req.user.tenantId]
     );
 
     await conn.commit();
@@ -198,13 +204,13 @@ router.put("/:id", async (req, res) => {
     await conn.beginTransaction();
 
     const [[prop]] = await conn.query(
-      "SELECT id_propietario FROM propiedades WHERE id = ?", [propertyId]
+      "SELECT id_propietario FROM propiedades WHERE id = ? AND tenant_id = ?", [propertyId, req.user.tenantId]
     );
     if (!prop) throw new Error("Propiedad no encontrada");
 
     // Validar que el inquilino tenga email válido
     const [[tenant]] = await conn.query(
-      "SELECT email FROM personas WHERE id = ? AND activo = 1", [tenantId]
+      "SELECT email FROM personas WHERE id = ? AND activo = 1 AND tenant_id = ?", [tenantId, req.user.tenantId]
     );
     if (!tenant) throw new Error("Inquilino no encontrado");
     if (!tenant.email || !tenant.email.includes("@"))

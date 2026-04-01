@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, createContext } from "react";
 import { Sidebar }       from "./components/layout/Sidebar";
 import { Dashboard }     from "./pages/Dashboard";
 import { Properties }    from "./pages/Properties";
@@ -9,12 +9,35 @@ import { ErrorBox }      from "./components/ui/ErrorBox";
 import { useApi }        from "./hooks/useApi";
 import { useTheme }      from "./hooks/useTheme";
 import { useAlerts }     from "./hooks/useAlerts";
+import { useAuth }       from "./hooks/useAuth";
+import Login            from "./pages/Login";
+
+// AuthContext para acceso global a autenticación
+export const AuthContext = createContext(null);
 
 export default function App() {
+  const [showApp, setShowApp] = useState(false);
   const [active,      setActiveRaw] = useState("dashboard");
   const [propFilter,  setPropFilter] = useState("todos");
   const [leaseFilter, setLeaseFilter] = useState("activo");
   const { dark, toggleDark } = useTheme();
+  
+  const auth = useAuth();
+  
+  // Verificar autenticación al montar la app
+  useEffect(() => {
+    const token = localStorage.getItem('authToken');
+    setShowApp(!!token);
+  }, []);
+
+  // Si no hay autenticación, mostrar login
+  if (!showApp && !auth.user) {
+    return (
+      <Login 
+        onLoginSuccess={() => setShowApp(true)}
+      />
+    );
+  }
 
   const { data: properties, setData: setProperties, loading: lProps,   error: eProps,   reload: reloadProps }   = useApi("/api/properties");
   const { data: owners,     setData: setOwners,     loading: lOwners,  error: eOwners,  reload: reloadOwners }  = useApi("/api/owners");
@@ -35,6 +58,11 @@ export default function App() {
       if (page === "properties" && filter) setPropFilter(filter);
       if (page === "leases"     && filter) setLeaseFilter(filter);
     }
+  };
+
+  const handleLogout = () => {
+    auth.logout();
+    setShowApp(false);
   };
 
   const shared = { properties, setProperties, owners, setOwners, tenants, setTenants, leases, setLeases };
@@ -77,6 +105,9 @@ export default function App() {
         alertCount={badgeCount}
         dark={dark}
         toggleDark={toggleDark}
+        user={auth.user}
+        tenant={auth.tenant}
+        onLogout={handleLogout}
       />
       <main className="flex-1 overflow-auto">
         <div className="max-w-5xl mx-auto px-6 py-8">

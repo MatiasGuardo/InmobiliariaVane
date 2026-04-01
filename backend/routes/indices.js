@@ -1,7 +1,11 @@
 import { Router } from "express";
 import { pool } from "../db.js";
+import { authMiddleware } from "../middleware/auth.js";
 
 const router = Router();
+
+// Todas las rutas requieren autenticación
+router.use(authMiddleware);
 
 // ─── Helpers ─────────────────────────────────────────────────
 function fmtFecha(date) {
@@ -230,10 +234,10 @@ router.post("/sync", async (req, res) => {
         if (isNaN(valor) || valor <= 0) continue;
 
         await conn.query(
-          `INSERT INTO indices_historicos (tipo, periodo, valor)
-           VALUES (?, ?, ?)
+          `INSERT INTO indices_historicos (tenant_id, tipo, periodo, valor)
+           VALUES (?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE valor = VALUES(valor)`,
-          [tipo, periodo, valor]
+          [req.user.tenantId, tipo, periodo, valor]
         );
         resultados[tipo]++;
       }
@@ -242,7 +246,8 @@ router.post("/sync", async (req, res) => {
     await conn.commit();
 
     const [[countRow]] = await conn.query(
-      "SELECT COUNT(*) as total FROM indices_historicos"
+      "SELECT COUNT(*) as total FROM indices_historicos WHERE tenant_id = ?",
+      [req.user.tenantId]
     );
 
     clearTimeout(globalTimeout);
@@ -269,10 +274,10 @@ router.post("/", async (req, res) => {
 
   try {
     await pool.query(
-      `INSERT INTO indices_historicos (tipo, periodo, valor)
-       VALUES (?, ?, ?)
+      `INSERT INTO indices_historicos (tenant_id, tipo, periodo, valor)
+       VALUES (?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE valor = VALUES(valor)`,
-      [tipo, periodoNorm, parseFloat(valor)]
+      [req.user.tenantId, tipo, periodoNorm, parseFloat(valor)]
     );
     res.status(201).json({ ok: true, tipo, periodo: periodoNorm, valor });
   } catch (err) {
@@ -289,8 +294,8 @@ router.get("/:tipo", async (req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT periodo, valor FROM indices_historicos
-       WHERE tipo = ? ORDER BY periodo DESC LIMIT 24`,
-      [tipo]
+       WHERE tipo = ? AND tenant_id = ? ORDER BY periodo DESC LIMIT 24`,
+      [tipo, req.user.tenantId]
     );
     // ✅ Fix Bug #3: fmtPeriodo evita "Sat Jan 01..." en la respuesta JSON
     res.json(

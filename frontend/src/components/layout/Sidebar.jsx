@@ -1,4 +1,4 @@
-import { Building2, Users, FileText, Bell, LayoutDashboard, Sun, Moon } from "lucide-react";
+import { Building2, Users, FileText, Bell, LayoutDashboard, Sun, Moon, LogOut } from "lucide-react";
 
 const NAV = [
   { id: "dashboard",     label: "Dashboard",   icon: LayoutDashboard },
@@ -8,7 +8,7 @@ const NAV = [
   { id: "notifications", label: "Alertas",     icon: Bell },
 ];
 
-export function Sidebar({ active, setActive, alertCount, dark, toggleDark }) {
+export function Sidebar({ active, setActive, alertCount, dark, toggleDark, user, tenant, onLogout }) {
   return (
     <aside className="w-60 flex-shrink-0 bg-white dark:bg-gray-800 border-r border-gray-100 dark:border-gray-700 flex flex-col h-screen sticky top-0">
 
@@ -19,7 +19,9 @@ export function Sidebar({ active, setActive, alertCount, dark, toggleDark }) {
             <Building2 size={16} className="text-white" />
           </div>
           <div>
-            <p className="text-sm font-bold text-gray-900 dark:text-gray-100">PropManager</p>
+            <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
+              {tenant?.nombre || 'PropManager'}
+            </p>
             <p className="text-xs text-gray-400 dark:text-gray-500">Gestión Inmobiliaria</p>
           </div>
         </div>
@@ -66,12 +68,28 @@ export function Sidebar({ active, setActive, alertCount, dark, toggleDark }) {
         </button>
 
         <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer">
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-xs font-bold">A</div>
-          <div className="min-w-0">
-            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate">Admin</p>
-            <p className="text-xs text-gray-400 dark:text-gray-500">admin@inmob.com</p>
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-xs font-bold">
+            {user?.nombre?.[0]?.toUpperCase() || 'A'}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate">
+              {user?.nombre || 'Usuario'}
+            </p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
+              {user?.email || 'correo@example.com'}
+            </p>
           </div>
         </div>
+
+        {onLogout && (
+          <button
+            onClick={onLogout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
+          >
+            <LogOut size={16} />
+            Cerrar Sesión
+          </button>
+        )}
       </div>
     </aside>
   );

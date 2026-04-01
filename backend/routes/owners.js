@@ -1,20 +1,24 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { mapOwner, splitName } from "../mappers.js";
+import { authMiddleware } from "../middleware/auth.js";
 
 const router = Router();
 
+// Todas las rutas requieren autenticación
+router.use(authMiddleware);
+
 // GET /api/owners
-router.get("/", async (_req, res) => {
+router.get("/", async (req, res) => {
   try {
     const [rows] = await pool.query(`
       SELECT pe.*, GROUP_CONCAT(pr.id ORDER BY pr.id) AS properties
       FROM personas pe
-      LEFT JOIN propiedades pr ON pr.id_propietario = pe.id AND pr.activo = 1
-      WHERE pe.activo = 1 AND pe.tipo_persona IN ('propietario', 'ambos')
+      LEFT JOIN propiedades pr ON pr.id_propietario = pe.id AND pr.activo = 1 AND pr.tenant_id = ?
+      WHERE pe.activo = 1 AND pe.tipo_persona IN ('propietario', 'ambos') AND pe.tenant_id = ?
       GROUP BY pe.id
       ORDER BY pe.apellido, pe.nombre
-    `);
+    `, [req.user.tenantId, req.user.tenantId]);
     res.json(rows.map(mapOwner));
   } catch (err) {
     console.error(err);
@@ -30,9 +34,9 @@ router.post("/", async (req, res) => {
   const { nombre, apellido } = splitName(name);
   try {
     const [result] = await pool.query(
-      `INSERT INTO personas (tipo_persona, nombre, apellido, documento_tipo, documento_nro, telefono, email, activo)
-       VALUES ('propietario', ?, ?, 'DNI', ?, ?, ?, 1)`,
-      [nombre, apellido, document || null, phone || null, email]
+      `INSERT INTO personas (tenant_id, tipo_persona, nombre, apellido, documento_tipo, documento_nro, telefono, email, activo)
+       VALUES (?, 'propietario', ?, ?, 'DNI', ?, ?, ?, 1)`,
+      [req.user.tenantId, nombre, apellido, document || null, phone || null, email]
     );
     const [[row]] = await pool.query("SELECT *, NULL AS properties FROM personas WHERE id = ?", [result.insertId]);
     res.status(201).json(mapOwner({ ...row, properties: null }));
@@ -53,14 +57,14 @@ router.put("/:id", async (req, res) => {
   const { nombre, apellido } = splitName(name);
   try {
     await pool.query(
-      `UPDATE personas SET nombre = ?, apellido = ?, email = ?, telefono = ?, documento_nro = ? WHERE id = ? AND tipo_persona IN ('propietario', 'ambos')`,
-      [nombre, apellido, email, phone || null, document || null, id]
+      `UPDATE personas SET nombre = ?, apellido = ?, email = ?, telefono = ?, documento_nro = ? WHERE id = ? AND tipo_persona IN ('propietario', 'ambos') AND tenant_id = ?`,
+      [nombre, apellido, email, phone || null, document || null, id, req.user.tenantId]
     );
     const [[row]] = await pool.query(
       `SELECT pe.*, GROUP_CONCAT(pr.id ORDER BY pr.id) AS properties
-       FROM personas pe LEFT JOIN propiedades pr ON pr.id_propietario = pe.id AND pr.activo = 1
-       WHERE pe.id = ? GROUP BY pe.id`,
-      [id]
+       FROM personas pe LEFT JOIN propiedades pr ON pr.id_propietario = pe.id AND pr.activo = 1 AND pr.tenant_id = ?
+       WHERE pe.id = ? AND pe.tenant_id = ? GROUP BY pe.id`,
+      [req.user.tenantId, id, req.user.tenantId]
     );
     res.json(mapOwner(row));
   } catch (err) {
@@ -78,8 +82,8 @@ router.delete("/:id", async (req, res) => {
 
     // 1. Obtener todas las propiedades activas del propietario
     const [props] = await conn.query(
-      "SELECT id FROM propiedades WHERE id_propietario = ? AND activo = 1",
-      [req.params.id]
+      "SELECT id FROM propiedades WHERE id_propietario = ? AND activo = 1 AND tenant_id = ?",
+      [req.params.id, req.user.tenantId]
     );
 
     for (const prop of props) {
@@ -116,7 +120,7 @@ router.delete("/:id", async (req, res) => {
     }
 
     // 7. Dar de baja al propietario
-    await conn.query("UPDATE personas SET activo = 0 WHERE id = ?", [req.params.id]);
+    await conn.query("UPDATE personas SET activo = 0 WHERE id = ? AND tenant_id = ?", [req.params.id, req.user.tenantId]);
 
     await conn.commit();
     res.json({ ok: true });

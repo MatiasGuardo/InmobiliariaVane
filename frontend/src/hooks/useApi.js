@@ -1,5 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useContext } from "react";
 import { API } from "../utils/helpers";
+
+// AuthContext será creado en App.jsx
+export const AuthContext = import.meta.env.DEV ? null : null;
 
 export function useApi(endpoint) {
   const [data,    setData]    = useState([]);
@@ -10,7 +13,18 @@ export function useApi(endpoint) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API}${endpoint}`);
+      // Obtener token del localStorage si existe
+      const token = localStorage.getItem('authToken');
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const res = await fetch(`${API}${endpoint}`, {
+        headers,
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setData(await res.json());
     } catch (e) {
