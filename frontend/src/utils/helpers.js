@@ -3,7 +3,15 @@
 export const fmtDate = d =>
   new Date(d).toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" });
 
-export const diffDays = d => Math.ceil((new Date(d) - new Date()) / 86400000);
+export const diffDays = (dateStr) => {
+  // Fuerza interpretación en zona horaria local (Argentina UTC-3)
+  // evitando el offset UTC que new Date("YYYY-MM-DD") aplica por defecto
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const target = new Date(y, m - 1, d);
+  const today  = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.ceil((target - today) / 86400000);
+};
 
 export const fmtDuration = (days) => {
   if (days <= 0) return "Venció";
