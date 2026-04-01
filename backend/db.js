@@ -13,7 +13,24 @@ export const pool = mysql.createPool({
   timezone: "Z",
 });
 
-// Verifica la conexión al importar
+// ─── Cache de schema para evitar queries repetidas ──────────────
+const schemaCache = new Map();
+
+export async function columnExists(table, column) {
+  const key = `${table}.${column}`;
+  if (schemaCache.has(key)) return schemaCache.get(key);
+  
+  const [[row]] = await pool.query(
+    `SELECT COUNT(*) AS cnt FROM information_schema.columns
+     WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`,
+    [table, column]
+  );
+  const exists = row.cnt > 0;
+  schemaCache.set(key, exists);
+  return exists;
+}
+
+// ─── Verificación de conexión al iniciar ──────────────────────
 pool.getConnection()
   .then(conn => { console.log("✅  Conectado a MySQL"); conn.release(); })
   .catch(err  => { console.error("❌  Error de conexión MySQL:", err.message); process.exit(1); });

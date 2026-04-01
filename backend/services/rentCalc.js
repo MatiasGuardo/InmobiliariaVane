@@ -9,9 +9,10 @@ import { pool } from "../db.js";
 
 // ─── Períodos en meses ────────────────────────────────────────
 const PERIOD_MONTHS = {
-  trimestral: 3,
-  semestral:  6,
-  anual:      12,
+  trimestral:    3,
+  cuatrimestral: 4,
+  semestral:     6,
+  anual:         12,
 };
 
 // ─── Calcula la próxima fecha de actualización ───────────────

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { pool }    from "../db.js";
+import { pool, columnExists }    from "../db.js";
 import { mapLease } from "../mappers.js";
 
 const router = Router();
@@ -9,7 +9,7 @@ const router = Router();
 // Construye el string legado para compatibilidad con registros FIJO viejos
 function buildIndiceAjuste(increase, period) {
   if (!increase) return null;
-  const p = ["trimestral", "semestral", "anual"].includes(period) ? period : "anual";
+  const p = ["trimestral", "cuatrimestral", "semestral", "anual"].includes(period) ? period : "anual";
   return `${increase}% ${p}`;
 }
 
@@ -27,7 +27,7 @@ async function getIndiceBase(conn, tipo, fecha) {
 
 // Calcula la próxima fecha de actualización a partir de una fecha base
 function calcProximaActualizacion(fechaInicio, periodo) {
-  const months = { trimestral: 3, semestral: 6, anual: 12 }[periodo] ?? 12;
+  const months = { trimestral: 3, cuatrimestral: 4, semestral: 6, anual: 12 }[periodo] ?? 12;
   const d = new Date(fechaInicio);
   d.setMonth(d.getMonth() + months);
   return d.toISOString().split("T")[0];
@@ -112,46 +112,28 @@ router.post("/", async (req, res) => {
     let insertQuery;
     let insertParams;
 
-    try {
-      // Verificar si existen las columnas nuevas
-      const [[colCheck]] = await conn.query(
-        `SELECT COUNT(*) AS cnt FROM information_schema.columns
-         WHERE table_schema = DATABASE()
-           AND table_name = 'contratos'
-           AND column_name = 'tipo_ajuste'`
-      );
-      const hasNewCols = colCheck.cnt > 0;
+    // Verificar si existen las columnas nuevas (cacheado en db.js)
+    const hasNewCols = await columnExists("contratos", "tipo_ajuste");
 
-      if (hasNewCols) {
-        insertQuery = `
-          INSERT INTO contratos
-            (propiedad_id, inquilino_id, propietario_id, fecha_inicio, fecha_fin,
-             monto_renta, moneda, estado_contrato,
-             indice_ajuste,
-             tipo_ajuste, periodo_ajuste, porcentaje_ajuste,
-             indice_base_fecha, indice_base_valor, proxima_actualizacion)
-          VALUES (?, ?, ?, ?, ?, ?, 'ARS', 'activo', ?, ?, ?, ?, ?, ?, ?)`;
-        insertParams = [
-          propertyId, tenantId, prop.id_propietario,
-          startDate, endDate, rent,
-          indiceAjuste,
-          tipoAjuste, period,
-          tipoAjuste === "FIJO" ? (Number(increase) || 0) : null,
-          indiceBaseFecha, indiceBaseValor, proximaActualizacion,
-        ];
-      } else {
-        // Fallback: solo columnas legacy
-        insertQuery = `
-          INSERT INTO contratos
-            (propiedad_id, inquilino_id, propietario_id, fecha_inicio, fecha_fin,
-             monto_renta, moneda, estado_contrato, indice_ajuste)
-          VALUES (?, ?, ?, ?, ?, ?, 'ARS', 'activo', ?)`;
-        insertParams = [
-          propertyId, tenantId, prop.id_propietario,
-          startDate, endDate, rent, indiceAjuste,
-        ];
-      }
-    } catch {
+    if (hasNewCols) {
+      insertQuery = `
+        INSERT INTO contratos
+          (propiedad_id, inquilino_id, propietario_id, fecha_inicio, fecha_fin,
+           monto_renta, moneda, estado_contrato,
+           indice_ajuste,
+           tipo_ajuste, periodo_ajuste, porcentaje_ajuste,
+           indice_base_fecha, indice_base_valor, proxima_actualizacion)
+        VALUES (?, ?, ?, ?, ?, ?, 'ARS', 'activo', ?, ?, ?, ?, ?, ?, ?)`;
+      insertParams = [
+        propertyId, tenantId, prop.id_propietario,
+        startDate, endDate, rent,
+        indiceAjuste,
+        tipoAjuste, period,
+        tipoAjuste === "FIJO" ? (Number(increase) || 0) : null,
+        indiceBaseFecha, indiceBaseValor, proximaActualizacion,
+      ];
+    } else {
+      // Fallback: solo columnas legacy
       insertQuery = `
         INSERT INTO contratos
           (propiedad_id, inquilino_id, propietario_id, fecha_inicio, fecha_fin,
@@ -171,7 +153,7 @@ router.post("/", async (req, res) => {
 
     await conn.commit();
 
-    const resolvedPeriod = ["trimestral", "semestral", "anual"].includes(period) ? period : "anual";
+    const resolvedPeriod = ["trimestral", "cuatrimestral", "semestral", "anual"].includes(period) ? period : "anual";
 
     res.status(201).json({
       id:         String(result.insertId),
@@ -246,50 +228,33 @@ router.put("/:id", async (req, res) => {
     const proximaActualizacion = calcProximaActualizacion(startDate, period);
     const indiceAjuste = tipoAjuste === "FIJO" ? buildIndiceAjuste(increase, period) : null;
 
-    try {
-      const [[colCheck]] = await conn.query(
-        `SELECT COUNT(*) AS cnt FROM information_schema.columns
-         WHERE table_schema = DATABASE()
-           AND table_name = 'contratos'
-           AND column_name = 'tipo_ajuste'`
-      );
-      const hasNewCols = colCheck.cnt > 0;
+    // Verificar si existen las columnas nuevas (cacheado en db.js)
+    const hasNewCols = await columnExists("contratos", "tipo_ajuste");
 
-      if (hasNewCols) {
-        await conn.query(
-          `UPDATE contratos SET
-             propiedad_id = ?, inquilino_id = ?, propietario_id = ?,
-             fecha_inicio = ?, fecha_fin = ?, monto_renta = ?,
-             indice_ajuste = ?,
-             tipo_ajuste = ?, periodo_ajuste = ?, porcentaje_ajuste = ?,
-             indice_base_fecha = ?, indice_base_valor = ?,
-             proxima_actualizacion = ?,
-             estado_contrato = ?
-           WHERE id = ?`,
-          [
-            propertyId, tenantId, prop.id_propietario,
-            startDate, endDate, rent,
-            indiceAjuste,
-            tipoAjuste, period,
-            tipoAjuste === "FIJO" ? (Number(increase) || 0) : null,
-            indiceBaseFecha, indiceBaseValor,
-            proximaActualizacion,
-            status || "activo",
-            id,
-          ]
-        );
-      } else {
-        await conn.query(
-          `UPDATE contratos SET
-             propiedad_id = ?, inquilino_id = ?, propietario_id = ?,
-             fecha_inicio = ?, fecha_fin = ?, monto_renta = ?,
-             indice_ajuste = ?, estado_contrato = ?
-           WHERE id = ?`,
-          [propertyId, tenantId, prop.id_propietario, startDate, endDate, rent,
-           indiceAjuste, status || "activo", id]
-        );
-      }
-    } catch {
+    if (hasNewCols) {
+      await conn.query(
+        `UPDATE contratos SET
+           propiedad_id = ?, inquilino_id = ?, propietario_id = ?,
+           fecha_inicio = ?, fecha_fin = ?, monto_renta = ?,
+           indice_ajuste = ?,
+           tipo_ajuste = ?, periodo_ajuste = ?, porcentaje_ajuste = ?,
+           indice_base_fecha = ?, indice_base_valor = ?,
+           proxima_actualizacion = ?,
+           estado_contrato = ?
+         WHERE id = ?`,
+        [
+          propertyId, tenantId, prop.id_propietario,
+          startDate, endDate, rent,
+          indiceAjuste,
+          tipoAjuste, period,
+          tipoAjuste === "FIJO" ? (Number(increase) || 0) : null,
+          indiceBaseFecha, indiceBaseValor,
+          proximaActualizacion,
+          status || "activo",
+          id,
+        ]
+      );
+    } else {
       await conn.query(
         `UPDATE contratos SET
            propiedad_id = ?, inquilino_id = ?, propietario_id = ?,
