@@ -14,17 +14,19 @@ export function mapOwner(row) {
     name:       `${row.nombre} ${row.apellido}`,
     email:      row.email,
     phone:      row.telefono || "",
+    document:   row.documento_nro || "",
     properties: row.properties ? row.properties.split(",").map(String) : [],
   };
 }
 
 export function mapTenant(row) {
   return {
-    id:      String(row.id),
-    name:    `${row.nombre} ${row.apellido}`,
-    email:   row.email,
-    phone:   row.telefono || "",
-    leaseId: row.leaseId ? String(row.leaseId) : null,
+    id:       String(row.id),
+    name:     `${row.nombre} ${row.apellido}`,
+    email:    row.email,
+    phone:    row.telefono || "",
+    document: row.documento_nro || "",
+    leaseId:  row.leaseId ? String(row.leaseId) : null,
   };
 }
 

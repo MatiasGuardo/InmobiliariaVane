@@ -76,6 +76,12 @@ function ContactDetailModal({ person, tab, properties, leases, onClose, onEdit, 
                   </a>
                 </span>
               )}
+              {person.document && (
+                <span className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                  <FileText size={14} className="text-gray-400 flex-shrink-0" />
+                  {person.document}
+                </span>
+              )}
             </div>
           </div>
 
@@ -180,7 +186,7 @@ export function Contacts({ owners, setOwners, tenants, setTenants, properties, l
   const [saving,       setSaving]       = useState(false);
   const [editing,      setEditing]      = useState(null);
   const [detailPerson, setDetailPerson] = useState(null);
-  const [form,         setForm]         = useState({ name: "", email: "", phone: "", role: "owner" });
+  const [form,         setForm]         = useState({ name: "", email: "", phone: "", document: "", role: "owner" });
   const [formError,    setFormError]    = useState("");
 
   const list = (tab === "owners" ? owners : tenants).filter(person => {
@@ -195,24 +201,32 @@ export function Contacts({ owners, setOwners, tenants, setTenants, properties, l
 
   const openNew = () => {
     setEditing(null);
-    setForm({ name: "", email: "", phone: "", role: tab === "owners" ? "owner" : "tenant" });
+    setForm({ name: "", email: "", phone: "", document: "", role: tab === "owners" ? "owner" : "tenant" });
     setFormError("");
     setModal(true);
   };
 
   const openEdit = (person) => {
     setEditing(person.id);
-    setForm({ name: person.name, email: person.email, phone: person.phone || "", role: tab === "owners" ? "owner" : "tenant" });
+    setForm({ name: person.name, email: person.email, phone: person.phone || "", document: person.document || "", role: tab === "owners" ? "owner" : "tenant" });
     setFormError("");
     setModal(true);
   };
 
   const validate = () => {
     const missing = [];
-    if (!form.name)  missing.push("nombre");
-    if (!form.email) missing.push("email");
+    if (!form.name)     missing.push("nombre");
+    if (!form.email)    missing.push("email");
+    if (!form.document) missing.push("DNI/CUIL");
+    if (!form.phone)    missing.push("teléfono");
     if (missing.length > 1) return `Faltan completar campos obligatorios: ${missing.join(", ")}.`;
     if (missing.length === 1) return `Falta completar un campo: ${missing[0]}.`;
+    
+    // Validar formato de email
+    if (form.email && !form.email.includes("@")) {
+      return "Ingrese un mail válido.";
+    }
+    
     return null;
   };
 
@@ -228,7 +242,7 @@ export function Contacts({ owners, setOwners, tenants, setTenants, properties, l
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: form.name, email: form.email, phone: form.phone }),
+        body: JSON.stringify({ name: form.name, email: form.email, phone: form.phone, document: form.document }),
       });
       if (!res.ok) throw new Error(await res.text());
       const saved = await res.json();
@@ -388,8 +402,11 @@ export function Contacts({ owners, setOwners, tenants, setTenants, properties, l
           <Field label="Email">
             <Input type="email" placeholder="juan@email.com" value={form.email} onChange={e => { setForm({ ...form, email: e.target.value }); setFormError(""); }} />
           </Field>
-          <Field label="Teléfono" hint="Opcional">
-            <Input placeholder="+54 11 1234-5678" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
+          <Field label="DNI/CUIL">
+            <Input placeholder="Ej: 12345678 o 20-12345678-9" value={form.document} onChange={e => { const val = e.target.value.replace(/[^0-9-]/g, ''); setForm({ ...form, document: val }); setFormError(""); }} />
+          </Field>
+          <Field label="Teléfono">
+            <Input placeholder="+54 11 1234-5678" value={form.phone} onChange={e => { const val = e.target.value.replace(/[^0-9+\s()-]/g, ''); setForm({ ...form, phone: val }); setFormError(""); }} />
           </Field>
 
           {formError && (

@@ -502,8 +502,8 @@ export function IndicesAdmin() {
           <Input type="month" value={periodo} onChange={e => setPeriodo(e.target.value)} />
         </Field>
         <Field label="Valor">
-          <Input type="number" step="0.01" placeholder="Ej: 1234.56" value={valor}
-            onChange={e => setValor(e.target.value)} />
+          <Input type="text" inputMode="decimal" placeholder="Ej: 1234.56" value={valor}
+            onChange={e => setValor(e.target.value.replace(/[^0-9.]/g, ''))} />
         </Field>
       </div>
       <button onClick={saveManual}

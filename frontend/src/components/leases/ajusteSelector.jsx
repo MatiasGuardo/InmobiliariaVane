@@ -135,7 +135,7 @@ function SinDatosFallback({ tipo, onSuccess }) {
           <div className="flex gap-2">
             <input type="month" value={mes} onChange={(e) => setMes(e.target.value)}
               className="flex-1 px-2.5 py-1.5 text-xs border border-amber-300 dark:border-amber-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 outline-none focus:border-amber-500" />
-            <input type="number" step="0.01" placeholder="Ej: 1234.56" value={val} onChange={(e) => setVal(e.target.value)}
+            <input type="text" inputMode="decimal" placeholder="Ej: 1234.56" value={val} onChange={(e) => setVal(e.target.value.replace(/[^0-9.]/g, ''))}
               className="flex-1 px-2.5 py-1.5 text-xs border border-amber-300 dark:border-amber-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 outline-none focus:border-amber-500" />
             <button type="button" onClick={saveManual} disabled={saving || !mes || !val}
               className="px-3 py-1.5 text-xs bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors">
@@ -266,12 +266,11 @@ export function AjusteSelector({
       {tipoAjuste === "FIJO" && (
         <Field label="Porcentaje de aumento por período (%)">
           <Input
-            type="number"
-            min="0"
-            step="0.5"
+            type="text"
+            inputMode="decimal"
             placeholder="Ej: 10"
             value={increase}
-            onChange={(e) => onIncrease(e.target.value)}
+            onChange={(e) => onIncrease(e.target.value.replace(/[^0-9.]/g, ''))}
           />
         </Field>
       )}
@@ -304,12 +303,7 @@ export function AjusteSelector({
               inputMode="decimal"
               placeholder="Ej: 85.32"
               value={iclVariacion}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val === "" || /^-?\d*[.,]?\d*$/.test(val)) {
-                  onIclVariacion?.(val.replace(",", "."));
-                }
-              }}
+              onChange={(e) => onIclVariacion?.(e.target.value.replace(/[^0-9.]/g, ''))}
             />
           </Field>
 

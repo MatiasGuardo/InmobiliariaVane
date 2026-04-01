@@ -24,14 +24,15 @@ router.get("/", async (_req, res) => {
 
 // POST /api/owners
 router.post("/", async (req, res) => {
-  const { name, email, phone } = req.body;
+  const { name, email, phone, document } = req.body;
   if (!name || !email) return res.status(400).json({ error: "Faltan campos: name, email" });
+  if (!email.includes("@")) return res.status(400).json({ error: "Ingrese un mail válido" });
   const { nombre, apellido } = splitName(name);
   try {
     const [result] = await pool.query(
       `INSERT INTO personas (tipo_persona, nombre, apellido, documento_tipo, documento_nro, telefono, email, activo)
        VALUES ('propietario', ?, ?, 'DNI', ?, ?, ?, 1)`,
-      [nombre, apellido, `TMP-${Date.now()}`, phone || null, email]
+      [nombre, apellido, document || null, phone || null, email]
     );
     const [[row]] = await pool.query("SELECT *, NULL AS properties FROM personas WHERE id = ?", [result.insertId]);
     res.status(201).json(mapOwner({ ...row, properties: null }));
@@ -46,13 +47,14 @@ router.post("/", async (req, res) => {
 // PUT /api/owners/:id
 router.put("/:id", async (req, res) => {
   const { id } = req.params;
-  const { name, email, phone } = req.body;
+  const { name, email, phone, document } = req.body;
   if (!name || !email) return res.status(400).json({ error: "Faltan campos: name, email" });
+  if (!email.includes("@")) return res.status(400).json({ error: "Ingrese un mail válido" });
   const { nombre, apellido } = splitName(name);
   try {
     await pool.query(
-      `UPDATE personas SET nombre = ?, apellido = ?, email = ?, telefono = ? WHERE id = ? AND tipo_persona IN ('propietario', 'ambos')`,
-      [nombre, apellido, email, phone || null, id]
+      `UPDATE personas SET nombre = ?, apellido = ?, email = ?, telefono = ?, documento_nro = ? WHERE id = ? AND tipo_persona IN ('propietario', 'ambos')`,
+      [nombre, apellido, email, phone || null, document || null, id]
     );
     const [[row]] = await pool.query(
       `SELECT pe.*, GROUP_CONCAT(pr.id ORDER BY pr.id) AS properties

@@ -69,8 +69,8 @@ export function LeaseFormModal({
 
         {/* Renta */}
         <Field label="Renta mensual (ARS)">
-          <Input type="number" placeholder="Ej: 350000" value={form.rent}
-            onChange={e => setForm({ ...form, rent: e.target.value })} />
+          <Input type="text" inputMode="decimal" placeholder="Ej: 350000" value={form.rent}
+            onChange={e => setForm({ ...form, rent: e.target.value.replace(/[^0-9.]/g, '') })} />
         </Field>
 
         {/* Cláusula de ajuste */}
