@@ -27,10 +27,11 @@ export default function App() {
   // ✅ Todos los useApi siempre se llaman (regla de hooks: nunca después de un return condicional)
   // Cuando el usuario no está autenticado, useApi no va a hacer fetch igual
   // porque el token no existe, pero los hooks deben existir siempre.
-  const { data: properties, setData: setProperties, loading: lProps,   error: eProps,   reload: reloadProps }   = useApi(auth.token ? "/api/properties" : null);
-  const { data: owners,     setData: setOwners,     loading: lOwners,  error: eOwners,  reload: reloadOwners }  = useApi(auth.token ? "/api/owners"     : null);
-  const { data: tenants,    setData: setTenants,    loading: lTenants, error: eTenants, reload: reloadTenants } = useApi(auth.token ? "/api/tenants"    : null);
-  const { data: leases,     setData: setLeases,     loading: lLeases,  error: eLeases,  reload: reloadLeases }  = useApi(auth.token ? "/api/leases"     : null);
+  const { data: properties, setData: setProperties, loading: lProps,   error: eProps,   reload: reloadProps }   = useApi(auth.token ? "/properties" : null, auth.token);
+  const { data: owners,     setData: setOwners,     loading: lOwners,  error: eOwners,  reload: reloadOwners }  = useApi(auth.token ? "/owners"     : null, auth.token);
+  const { data: tenants,    setData: setTenants,    loading: lTenants, error: eTenants, reload: reloadTenants } = useApi(auth.token ? "/tenants"    : null, auth.token);
+  const { data: leases,     setData: setLeases,     loading: lLeases,  error: eLeases,  reload: reloadLeases }  = useApi(auth.token ? "/leases"     : null, auth.token);
+  const { data: subscription, loading: lSub } = useApi(auth.token ? "/subscriptions/mi-suscripcion" : null, auth.token);
 
   const { badgeCount, dismiss, activeAlerts } = useAlerts(leases);
 
@@ -115,6 +116,7 @@ export default function App() {
           user={auth.user}
           tenant={auth.tenant}
           onLogout={handleLogout}
+          subscription={subscription}
         />
         <main className="flex-1 overflow-auto">
           <div className="max-w-5xl mx-auto px-6 py-8">

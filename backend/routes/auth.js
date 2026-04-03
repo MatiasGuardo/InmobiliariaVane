@@ -6,6 +6,7 @@ import {
   verifyToken
 } from '../services/authService.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { pool } from '../db.js';
 
 const router = express.Router();
 
@@ -15,7 +16,6 @@ const router = express.Router();
  * 
  * Body:
  * {
- *   "tenant": "nombre-de-la-inmobiliaria",
  *   "email": "user@example.com",
  *   "password": "password123"
  * }
@@ -27,43 +27,60 @@ const router = express.Router();
  *     "id": 1,
  *     "email": "user@example.com",
  *     "nombre": "Juan Pérez",
- *     "rol": "admin"
+ *     "rol": "admin",
+ *     "tenantId": 1
  *   }
  * }
  */
 router.post('/login', async (req, res) => {
   try {
-    const { tenant, email, password } = req.body;
+    const { email, password } = req.body;
 
-    // Validar que todos los campos estén presentes
-    if (!tenant || !email || !password) {
+    // Validar que email y password estén presentes
+    if (!email || !password) {
       return res.status(400).json({ 
-        error: 'Se requieren: tenant, email, password' 
+        error: 'Se requieren: email, password' 
       });
     }
 
-    // Buscar el tenant por nombre
-    const tenantData = await findTenantByName(tenant);
-    if (!tenantData) {
-      return res.status(404).json({ 
-        error: 'Tenant no encontrado' 
+    // Buscar usuario por email en CUALQUIER tenant
+    const [usuarios] = await pool.query(
+      'SELECT id, tenant_id, email, password_hash, nombre, rol, activo FROM usuarios WHERE email = ? LIMIT 1',
+      [email]
+    );
+
+    if (usuarios.length === 0) {
+      return res.status(401).json({ 
+        error: 'Email o contraseña incorrectos' 
       });
     }
 
-    if (!tenantData.activo) {
+    const usuario = usuarios[0];
+
+    // Verificar que el usuario esté activo
+    if (!usuario.activo) {
       return res.status(403).json({ 
-        error: 'Tenant inactivo' 
+        error: 'Usuario inactivo' 
       });
     }
 
     // Autenticar al usuario
-    const result = await authenticateUser(email, password, tenantData.id);
+    const result = await authenticateUser(email, password, usuario.tenant_id);
+
+    // Obtener información del tenant
+    const [tenants] = await pool.query(
+      'SELECT id, nombre FROM tenants WHERE id = ? LIMIT 1',
+      [usuario.tenant_id]
+    );
+    const tenantData = tenants.length > 0 ? tenants[0] : { id: usuario.tenant_id, nombre: 'Tenant' };
 
     res.status(200).json({
       token: result.token,
       usuario: result.usuario,
-      tenantId: tenantData.id,
-      tenantNombre: tenantData.nombre
+      tenant: {
+        id: tenantData.id,
+        nombre: tenantData.nombre
+      }
     });
 
   } catch (error) {

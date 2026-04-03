@@ -1,20 +1,42 @@
 // backend/server.js
-import express   from "express";
-import cors      from "cors";
-import dotenv    from "dotenv";
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// ⚠️  CRÍTICO: Cargar .env ANTES de cualquier otra cosa
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const envPath = path.join(__dirname, '.env');
+
+const envResult = dotenv.config({ path: envPath });
+console.log('✅ Intentando cargar .env desde:', envPath);
+if (envResult.error) {
+  console.error('⚠️  Error cargando .env:', envResult.error.message);
+} else {
+  console.log('✅ .env cargado exitosamente');
+}
+
+console.log('JWT_SECRET definido:', !!process.env.JWT_SECRET);
+if (process.env.JWT_SECRET) {
+  console.log('JWT_SECRET (primeros 30 caracteres):', process.env.JWT_SECRET.substring(0, 30) + '...');
+} else {
+  console.error('❌ JWT_SECRET NO está definido en .env');
+}
+
+import express from "express";
+import cors    from "cors";
 
 import propertiesRouter from "./routes/properties.js";
 import ownersRouter     from "./routes/owners.js";
 import tenantsRouter    from "./routes/tenants.js";
 import leasesRouter     from "./routes/leases.js";
 import documentsRouter  from "./routes/documents.js";
-import indicesRouter    from "./routes/indices.js";   // ← ERA EL BUG PRINCIPAL
+import indicesRouter    from "./routes/indices.js";
 import authRouter       from "./routes/auth.js";
+import subscriptionsRouter from "./routes/subscriptions.js";
 
 import "./db.js";
 import "./cron.js";
-
-dotenv.config();
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -37,8 +59,9 @@ app.use("/api/owners",     ownersRouter);
 app.use("/api/tenants",    tenantsRouter);
 app.use("/api/leases",     leasesRouter);
 app.use("/api/documents",  documentsRouter);
-app.use("/api/indices",    indicesRouter);            // ← ERA EL BUG PRINCIPAL
+app.use("/api/indices",    indicesRouter);
 app.use("/api/auth",       authRouter);
+app.use("/api/subscriptions", subscriptionsRouter);
 
 app.get("/api/alertas", async (_req, res) => {
   try {
@@ -75,6 +98,16 @@ app.post("/api/admin/run-cron", async (_req, res) => {
 });
 
 app.get("/api/health", (_req, res) => res.json({ status: "ok", ts: new Date() }));
+
+// DEBUG: Verifica que JWT_SECRET está cargado
+app.get("/api/debug/jwt-secret", (_req, res) => {
+  const secret = process.env.JWT_SECRET;
+  res.json({ 
+    hasSecret: !!secret, 
+    secretLength: secret ? secret.length : 0,
+    secretFirst20: secret ? secret.substring(0, 20) + '...' : 'NO DEFINIDO'
+  });
+});
 
 app.listen(PORT, () => {
   console.log(`🚀  PropManager API corriendo en http://localhost:${PORT}`);

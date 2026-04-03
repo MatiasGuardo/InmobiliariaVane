@@ -2,8 +2,16 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { pool } from '../db.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
-const JWT_EXPIRY = '24h';
+const JWT_EXPIRY = '7d'; // Token válido por 7 días
+
+// Función helper para obtener JWT_SECRET en runtime
+function getJWTSecret() {
+  const secret = process.env.JWT_SECRET || 'dev-secret-change-in-production';
+  if (!process.env.JWT_SECRET) {
+    console.warn('⚠️  JWT_SECRET no está definido, usando fallback inseguro');
+  }
+  return secret;
+}
 
 export async function hashPassword(password) {
   const saltRounds = 10;
@@ -23,7 +31,7 @@ export function generateToken(usuario) {
       nombre: usuario.nombre,
       rol: usuario.rol
     },
-    JWT_SECRET,
+    getJWTSecret(),
     { expiresIn: JWT_EXPIRY }
   );
 }
@@ -125,7 +133,7 @@ export async function authenticateUser(email, passwordPlain, tenantId) {
 
 export function verifyToken(token) {
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return jwt.verify(token, getJWTSecret());
   } catch (error) {
     throw new Error('Token inválido o expirado');
   }

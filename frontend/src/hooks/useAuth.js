@@ -38,7 +38,7 @@ export function useAuth() {
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tenant: tenantName, email, password }),
+        body: JSON.stringify({ email, password }),
       });
 
       const text = await response.text();
@@ -55,17 +55,17 @@ export function useAuth() {
         throw new Error(data.error || 'Error al autenticar');
       }
 
-      const { token: newToken, usuario, tenantId, tenantNombre } = data;
+      const { token: newToken, usuario, tenant: tenantInfo } = data;
 
       setToken(newToken);
       setUser(usuario);
-      setTenant({ id: tenantId, nombre: tenantNombre });
+      setTenant(tenantInfo);
 
       localStorage.setItem('authToken',  newToken);
       localStorage.setItem('authUser',   JSON.stringify(usuario));
-      localStorage.setItem('authTenant', JSON.stringify({ id: tenantId, nombre: tenantNombre }));
+      localStorage.setItem('authTenant', JSON.stringify(tenantInfo));
 
-      return { token: newToken, usuario, tenantId, tenantNombre };
+      return { token: newToken, usuario, tenant: tenantInfo };
     } catch (err) {
       const errorMsg = err.message || 'Error al autenticar';
       setError(errorMsg);

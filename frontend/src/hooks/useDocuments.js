@@ -13,7 +13,7 @@ export function useDocuments(entityType, entityId) {
     setError(null);
     try {
       const res = await fetch(
-        `${API}/api/documents?entityType=${entityType}&entityId=${entityId}`
+        `${API}/documents?entityType=${entityType}&entityId=${entityId}`
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setDocs(await res.json());
@@ -38,7 +38,7 @@ export function useDocuments(entityType, entityId) {
         reader.readAsDataURL(file);
       });
 
-      const res = await fetch(`${API}/api/documents`, {
+      const res = await fetch(`${API}/documents`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -66,14 +66,14 @@ export function useDocuments(entityType, entityId) {
 
   const remove = useCallback(async (docId) => {
     try {
-      await fetch(`${API}/api/documents/${docId}`, { method: "DELETE" });
+      await fetch(`${API}/documents/${docId}`, { method: "DELETE" });
       setDocs(prev => prev.filter(d => d.id !== docId));
     } catch (e) {
       setError(e.message);
     }
   }, []);
 
-  const getFileUrl = (docId) => `${API}/api/documents/${docId}/file`;
+  const getFileUrl = (docId) => `${API}/documents/${docId}/file`;
 
   return { docs, loading, uploading, error, upload, remove, getFileUrl, reload: load };
 }
