@@ -53,8 +53,9 @@ export const getAlertLevel = (days) => {
 };
 
 // ─── URL BASE DE LA API ───────────────────────────────────────
+// En desarrollo usa el proxy de Vite (/api), en producción usa la URL del .env (debe incluir /api)
 
-export const API = import.meta.env.VITE_API_URL || "http://localhost:3001";
+export const API = import.meta.env.DEV ? "/api" : (import.meta.env.VITE_API_URL?.replace(/\/$/, '') || "http://localhost:3001/api");
 
 // ─── API CALLS CON AUTENTICACIÓN ──────────────────────────────
 /**

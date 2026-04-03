@@ -2,11 +2,13 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { mapProperty, mapTipoDB } from "../mappers.js";
 import { authMiddleware } from "../middleware/auth.js";
+import { subscriptionMiddleware } from "../middleware/subscription.js";
 
 const router = Router();
 
-// Todas las rutas requieren autenticación
+// Todas las rutas requieren autenticación y suscripción activa
 router.use(authMiddleware);
+router.use(subscriptionMiddleware);
 
 // GET /api/properties
 router.get("/", async (req, res) => {

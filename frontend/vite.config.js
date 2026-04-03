@@ -15,6 +15,12 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
         secure: false,
+        // Aumentar timeout para conexiones lentas
+        timeout: 30000,
+        // Asegurar que se pasan TODOS los headers sin modificaciones
+        headers: {
+          'Connection': 'keep-alive',
+        },
       },
     },
   },

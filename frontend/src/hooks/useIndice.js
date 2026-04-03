@@ -28,7 +28,7 @@ export function useIndice(tipo) {
     try {
       // Cache-buster para evitar respuestas cacheadas por el navegador
       const ts = Date.now();
-      const res = await fetch(`${API}/api/indices/${tipo}?_t=${ts}`, {
+      const res = await fetch(`${API}/indices/${tipo}?_t=${ts}`, {
         signal: controller.signal,
         headers: { "Cache-Control": "no-cache" },
       });
