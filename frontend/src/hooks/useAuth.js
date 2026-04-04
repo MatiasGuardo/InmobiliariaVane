@@ -35,6 +35,11 @@ export function useAuth() {
     setError(null);
     setLoading(true);
     try {
+      // 🔄 Limpiar datos anteriores antes de hacer login
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('authUser');
+      localStorage.removeItem('authTenant');
+
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -57,6 +62,7 @@ export function useAuth() {
 
       const { token: newToken, usuario, tenant: tenantInfo } = data;
 
+      // ✅ Solo guardar si el login fue exitoso
       setToken(newToken);
       setUser(usuario);
       setTenant(tenantInfo);
@@ -69,6 +75,13 @@ export function useAuth() {
     } catch (err) {
       const errorMsg = err.message || 'Error al autenticar';
       setError(errorMsg);
+      // 🧹 Si hay error, limpiar también el estado
+      setToken(null);
+      setUser(null);
+      setTenant(null);
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('authUser');
+      localStorage.removeItem('authTenant');
       throw err;
     } finally {
       setLoading(false);
