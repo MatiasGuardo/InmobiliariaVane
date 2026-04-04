@@ -33,6 +33,19 @@ export function useApi(endpoint, token = null) {
       const res = await fetch(`${API}${endpoint}`, {
         headers,
       });
+
+      // 🔑 Si recibe 401, el token es inválido/expirado — limpiar localStorage
+      // (No 403, porque 403 puede ser falta de suscripción, no error de autenticación)
+      if (res.status === 401) {
+        console.warn(`[useApi] Token inválido (401). Limpiando almacenamiento...`);
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('authUser');
+        localStorage.removeItem('authTenant');
+        // Recargar la página para que useAuth reinicie sin datos viejos
+        window.location.href = '/';
+        return;
+      }
+
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setData(await res.json());
     } catch (e) {

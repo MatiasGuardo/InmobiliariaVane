@@ -1,111 +1,11 @@
+// backend/services/subscriptionService.js
 import { pool } from '../db.js';
+import { createPreapproval, getPreapproval, cancelPreapproval } from './mpService.js';
 
-/**
- * Obtiene la suscripción activa de un usuario/tenant
- */
-export async function getActiveSubscription(usuarioId, tenantId) {
-  const [suscripciones] = await pool.query(
-    `SELECT s.*, p.nombre as plan_nombre, p.limite_propiedades, p.limite_usuarios, 
-            p.include_reportes, p.include_automatizacion
-     FROM suscripciones s
-     JOIN planes p ON p.id = s.plan_id
-     WHERE s.usuario_id = ? AND s.tenant_id = ? AND s.estado = 'activo'
-     LIMIT 1`,
-    [usuarioId, tenantId]
-  );
-  
-  return suscripciones.length > 0 ? suscripciones[0] : null;
-}
+// ─────────────────────────────────────────────
+// PLANES
+// ─────────────────────────────────────────────
 
-/**
- * Verifica si una suscripción está activa (no expirada y no cancelada)
- */
-export async function isSubscriptionActive(usuarioId, tenantId) {
-  const [result] = await pool.query(
-    `SELECT COUNT(*) as count FROM suscripciones 
-     WHERE usuario_id = ? AND tenant_id = ? 
-     AND estado = 'activo' AND fecha_fin >= CURDATE()`,
-    [usuarioId, tenantId]
-  );
-  
-  return result[0].count > 0;
-}
-
-/**
- * Crea una nueva suscripción
- */
-export async function createSubscription(usuarioId, tenantId, planId, ciclo = 'mensual') {
-  try {
-    const dias = ciclo === 'anual' ? 365 : 30;
-    const fechaInicio = new Date();
-    const fechaFin = new Date();
-    fechaFin.setDate(fechaFin.getDate() + dias);
-
-    const [result] = await pool.query(
-      `INSERT INTO suscripciones (usuario_id, tenant_id, plan_id, fecha_inicio, fecha_fin, 
-                                 fecha_renovacion_proximo, ciclo_facturacion, estado, renovacion_automatica)
-       VALUES (?, ?, ?, CURDATE(), ?, ?, ?, 'activo', TRUE)`,
-      [usuarioId, tenantId, planId, fechaFin.toISOString().split('T')[0], 
-       fechaFin.toISOString().split('T')[0], ciclo]
-    );
-
-    return { id: result.insertId, usuarioId, tenantId, planId, ciclo };
-  } catch (error) {
-    if (error.code === 'ER_DUP_ENTRY') {
-      throw new Error('Este usuario ya tiene una suscripción activa');
-    }
-    throw error;
-  }
-}
-
-/**
- * Cancela una suscripción
- */
-export async function cancelSubscription(suscripcionId) {
-  const [result] = await pool.query(
-    `UPDATE suscripciones SET estado = 'cancelado', updated_at = NOW() WHERE id = ?`,
-    [suscripcionId]
-  );
-
-  return result.affectedRows > 0;
-}
-
-/**
- * Extiende una suscripción (para renovaciones)
- */
-export async function renewSubscription(suscripcionId, planId = null) {
-  // Obtener la suscripción actual
-  const [suscripciones] = await pool.query(
-    'SELECT * FROM suscripciones WHERE id = ?',
-    [suscripcionId]
-  );
-
-  if (!suscripciones.length) {
-    throw new Error('Suscripción no encontrada');
-  }
-
-  const sub = suscripciones[0];
-  const dias = sub.ciclo_facturacion === 'anual' ? 365 : 30;
-  
-  // Nueva fecha de fin
-  const nuevaFechaFin = new Date(sub.fecha_fin);
-  nuevaFechaFin.setDate(nuevaFechaFin.getDate() + dias);
-
-  const [result] = await pool.query(
-    `UPDATE suscripciones 
-     SET fecha_fin = ?, fecha_renovacion_proximo = ?, estado = 'activo', updated_at = NOW()
-     ${planId ? ', plan_id = ?' : ''}
-     WHERE id = ?`,
-    planId ? [nuevaFechaFin.toISOString().split('T')[0], nuevaFechaFin.toISOString().split('T')[0], planId, suscripcionId]
-           : [nuevaFechaFin.toISOString().split('T')[0], nuevaFechaFin.toISOString().split('T')[0], suscripcionId]
-  );
-
-  return result.affectedRows > 0;
-}
-
-/**
- * Obtiene todos los planes disponibles
- */
 export async function getAllPlans() {
   const [planes] = await pool.query(
     'SELECT * FROM planes WHERE activo = TRUE ORDER BY precio_mensual ASC'
@@ -113,44 +13,203 @@ export async function getAllPlans() {
   return planes;
 }
 
-/**
- * Obtiene un plan por ID
- */
 export async function getPlanById(planId) {
   const [planes] = await pool.query(
-    'SELECT * FROM planes WHERE id = ? AND activo = TRUE',
+    'SELECT * FROM planes WHERE id = ? AND activo = TRUE LIMIT 1',
     [planId]
   );
   return planes.length > 0 ? planes[0] : null;
 }
 
+// ─────────────────────────────────────────────
+// SUSCRIPCIONES
+// ─────────────────────────────────────────────
+
 /**
- * Registra un pago
+ * Asigna el plan Gratis automáticamente al registrarse.
+ * Fecha_fin = 100 años (equivale a "sin vencimiento" para plan gratuito).
  */
+export async function assignFreePlan(usuarioId, tenantId) {
+  const [planes] = await pool.query(
+    "SELECT id FROM planes WHERE nombre = 'Gratis' AND activo = TRUE LIMIT 1"
+  );
+  if (!planes.length) throw new Error('Plan gratuito no configurado en la BD. Ejecutá la migración 003-planes-setup.sql');
+
+  const planId = planes[0].id;
+  const fechaFin = new Date();
+  fechaFin.setFullYear(fechaFin.getFullYear() + 100);
+  const fechaFinStr = fechaFin.toISOString().split('T')[0];
+
+  await pool.query(
+    `INSERT INTO suscripciones
+       (usuario_id, tenant_id, plan_id, fecha_inicio, fecha_fin,
+        fecha_renovacion_proximo, ciclo_facturacion, estado, renovacion_automatica)
+     VALUES (?, ?, ?, CURDATE(), ?, ?, 'mensual', 'activo', FALSE)`,
+    [usuarioId, tenantId, planId, fechaFinStr, fechaFinStr]
+  );
+}
+
+/**
+ * Obtiene la suscripción activa de un usuario
+ */
+export async function getActiveSubscription(usuarioId, tenantId) {
+  const [rows] = await pool.query(
+    `SELECT s.*, p.nombre AS plan_nombre
+     FROM suscripciones s
+     JOIN planes p ON p.id = s.plan_id
+     WHERE s.usuario_id = ? AND s.tenant_id = ?
+       AND s.estado = 'activo' AND s.fecha_fin >= CURDATE()
+     ORDER BY s.created_at DESC
+     LIMIT 1`,
+    [usuarioId, tenantId]
+  );
+  return rows.length > 0 ? rows[0] : null;
+}
+
+/**
+ * Verifica si la suscripción está activa y no vencida
+ */
+export async function isSubscriptionActive(usuarioId, tenantId) {
+  const [result] = await pool.query(
+    `SELECT COUNT(*) AS count FROM suscripciones
+     WHERE usuario_id = ? AND tenant_id = ?
+       AND estado = 'activo' AND fecha_fin >= CURDATE()`,
+    [usuarioId, tenantId]
+  );
+  return result[0].count > 0;
+}
+
+// ─────────────────────────────────────────────
+// UPGRADE CON MERCADOPAGO
+// ─────────────────────────────────────────────
+
+/**
+ * Inicia el proceso de upgrade:
+ * 1. Obtiene el plan con su mp_plan_id
+ * 2. Crea el preapproval en MP
+ * 3. Guarda la suscripción como 'pendiente' en la BD
+ * 4. Devuelve { init_point } para redirigir al usuario
+ */
+export async function initiateUpgrade(usuarioId, tenantId, planId, email) {
+  const plan = await getPlanById(planId);
+  if (!plan) throw new Error('Plan no encontrado');
+  if (!plan.mp_plan_id) throw new Error('Este plan no tiene un ID de MercadoPago configurado. Ejecutá setupMpPlans.js');
+
+  // Crear preapproval en MP
+  const preapproval = await createPreapproval({
+    planMpId: plan.mp_plan_id,
+    email,
+  });
+
+  // Guardar suscripción pendiente en BD
+  await pool.query(
+    `INSERT INTO suscripciones
+       (usuario_id, tenant_id, plan_id, fecha_inicio, fecha_fin,
+        fecha_renovacion_proximo, ciclo_facturacion, estado,
+        renovacion_automatica, mp_preapproval_id)
+     VALUES (?, ?, ?, CURDATE(), DATE_ADD(CURDATE(), INTERVAL 30 DAY),
+             DATE_ADD(CURDATE(), INTERVAL 30 DAY),
+             'mensual', 'pendiente', TRUE, ?)`,
+    [usuarioId, tenantId, planId, preapproval.id]
+  );
+
+  return {
+    init_point: preapproval.init_point,
+    preapproval_id: preapproval.id,
+  };
+}
+
+/**
+ * Activa una suscripción cuando MP confirma el pago (webhook authorized).
+ * Cancela la suscripción gratuita/anterior.
+ */
+export async function activateSubscription(mpPreapprovalId) {
+  // Verificar estado real en MP
+  const preapproval = await getPreapproval(mpPreapprovalId);
+  if (preapproval.status !== 'authorized') {
+    throw new Error(`Pago no autorizado. Estado MP: ${preapproval.status}`);
+  }
+
+  // Buscar la suscripción pendiente
+  const [rows] = await pool.query(
+    "SELECT * FROM suscripciones WHERE mp_preapproval_id = ? AND estado = 'pendiente' LIMIT 1",
+    [mpPreapprovalId]
+  );
+  if (!rows.length) throw new Error('Suscripción pendiente no encontrada');
+
+  const sub = rows[0];
+
+  // Cancelar suscripciones activas anteriores del mismo usuario/tenant
+  await pool.query(
+    `UPDATE suscripciones
+     SET estado = 'cancelado', updated_at = NOW()
+     WHERE usuario_id = ? AND tenant_id = ? AND estado = 'activo'`,
+    [sub.usuario_id, sub.tenant_id]
+  );
+
+  // Activar la nueva
+  const fechaFin = new Date();
+  fechaFin.setMonth(fechaFin.getMonth() + 1);
+  await pool.query(
+    `UPDATE suscripciones
+     SET estado = 'activo',
+         fecha_inicio = CURDATE(),
+         fecha_fin = ?,
+         fecha_renovacion_proximo = ?,
+         updated_at = NOW()
+     WHERE id = ?`,
+    [fechaFin.toISOString().split('T')[0], fechaFin.toISOString().split('T')[0], sub.id]
+  );
+
+  return sub;
+}
+
+/**
+ * Cancela suscripción en MP y en la BD
+ */
+export async function cancelSubscription(suscripcionId, usuarioId) {
+  const [rows] = await pool.query(
+    'SELECT * FROM suscripciones WHERE id = ? AND usuario_id = ? LIMIT 1',
+    [suscripcionId, usuarioId]
+  );
+  if (!rows.length) throw new Error('Suscripción no encontrada');
+  const sub = rows[0];
+
+  if (sub.mp_preapproval_id) {
+    try { await cancelPreapproval(sub.mp_preapproval_id); } catch (e) {
+      console.warn('[subscriptionService] No se pudo cancelar en MP:', e.message);
+    }
+  }
+
+  await pool.query(
+    "UPDATE suscripciones SET estado = 'cancelado', updated_at = NOW() WHERE id = ?",
+    [suscripcionId]
+  );
+  return true;
+}
+
+// ─────────────────────────────────────────────
+// HISTORIAL DE PAGOS
+// ─────────────────────────────────────────────
+
 export async function recordPayment(suscripcionId, usuarioId, tenantId, monto, estado = 'completado', transaccionId = null) {
   const [result] = await pool.query(
     `INSERT INTO pagos (suscripcion_id, usuario_id, tenant_id, monto, estado, transaccion_id, fecha_pago)
      VALUES (?, ?, ?, ?, ?, ?, NOW())`,
     [suscripcionId, usuarioId, tenantId, monto, estado, transaccionId]
   );
-
   return result.insertId;
 }
 
-/**
- * Obtiene el historial de pagos de un usuario
- */
-export async function getPaymentHistory(usuarioId, tenantId = null) {
-  let query = 'SELECT * FROM pagos WHERE usuario_id = ?';
-  let params = [usuarioId];
-
-  if (tenantId) {
-    query += ' AND tenant_id = ?';
-    params.push(tenantId);
-  }
-
-  query += ' ORDER BY created_at DESC LIMIT 50';
-
-  const [pagos] = await pool.query(query, params);
+export async function getPaymentHistory(usuarioId, tenantId) {
+  const [pagos] = await pool.query(
+    `SELECT p.*, pl.nombre AS plan_nombre
+     FROM pagos p
+     JOIN suscripciones s ON s.id = p.suscripcion_id
+     JOIN planes pl ON pl.id = s.plan_id
+     WHERE p.usuario_id = ? AND p.tenant_id = ?
+     ORDER BY p.created_at DESC LIMIT 50`,
+    [usuarioId, tenantId]
+  );
   return pagos;
 }
