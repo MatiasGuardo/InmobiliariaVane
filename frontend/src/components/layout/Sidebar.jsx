@@ -22,7 +22,7 @@ export function Sidebar({ active, setActive, alertCount, dark, toggleDark, user,
           </div>
           <div>
             <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
-              {tenant?.nombre || 'PropManager'}
+              {tenant?.nombre === 'Default Tenant' ? 'PropManager' : (tenant?.nombre || 'PropManager')}
             </p>
             <p className="text-xs text-gray-400 dark:text-gray-500">Gestión Inmobiliaria</p>
           </div>
