@@ -32,6 +32,8 @@ async function fetchBCRA(tipo) {
     const agent = new Agent({ connect: { rejectUnauthorized: false } });
 
     const varId = BCRA_VAR_IDS[tipo];
+    if (!varId) throw new Error(`Variable ID no definida para ${tipo}`);
+    
     const hasta = new Date();
     const desde = new Date();
     desde.setMonth(desde.getMonth() - 18);
@@ -39,6 +41,8 @@ async function fetchBCRA(tipo) {
     const url =
       `https://api.bcra.gob.ar/estadisticas/v3.0/datosvariable/` +
       `${varId}/${fmtFecha(desde)}/${fmtFecha(hasta)}`;
+    
+    console.log(`[fetchBCRA] ${tipo}: Solicitando ${url}`);
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
@@ -51,6 +55,8 @@ async function fetchBCRA(tipo) {
       });
       clearTimeout(timeout);
 
+      console.log(`[fetchBCRA] ${tipo}: Status ${res.status}`);
+
       if (!res.ok) {
         const body = await res.text().catch(() => "");
         throw new Error(`BCRA HTTP ${res.status}: ${body.slice(0, 200)}`);
@@ -59,17 +65,22 @@ async function fetchBCRA(tipo) {
       const json = await res.json();
       const results = json.results ?? json.data ?? [];
 
+      console.log(`[fetchBCRA] ${tipo}: Respuesta parseada, resultados encontrados: ${results.length}`);
+
       if (!Array.isArray(results) || results.length === 0) {
         throw new Error(`BCRA devolvió respuesta vacía para variable ${varId}`);
       }
 
-      return results
+      const filtered = results
         .filter((r) => r.fecha && r.valor != null)
         .map((r) => ({
           fecha: String(r.fecha).slice(0, 10),
           valor: parseFloat(r.valor),
         }))
         .filter((r) => !isNaN(r.valor));
+      
+      console.log(`[fetchBCRA] ${tipo}: Filtrados ${filtered.length} registros válidos`);
+      return filtered;
     } catch (err) {
       clearTimeout(timeout);
       throw err;
@@ -160,7 +171,9 @@ async function fetchIndice(tipo) {
 
   // Intento 1: BCRA via undici
   try {
+    console.log(`[fetchIndice] ${tipo}: Probando BCRA...`);
     const rows = await fetchBCRA(tipo);
+    console.log(`[fetchIndice] ${tipo}: BCRA OK - ${rows.length} registros`);
     if (rows.length > 0) {
       console.log(`[indices] BCRA OK para ${tipo}: ${rows.length} registros`);
       return { rows, fuente: "BCRA" };
@@ -173,7 +186,9 @@ async function fetchIndice(tipo) {
 
   // Intento 2: ArgentinaDatos
   try {
+    console.log(`[fetchIndice] ${tipo}: Probando ArgentinaDatos...`);
     const rows = await fetchArgentinaDatos(tipo);
+    console.log(`[fetchIndice] ${tipo}: ArgentinaDatos OK - ${rows.length} registros`);
     if (rows.length > 0) {
       console.log(`[indices] ArgentinaDatos OK para ${tipo}: ${rows.length} registros`);
       return { rows, fuente: "ArgentinaDatos" };
@@ -187,7 +202,9 @@ async function fetchIndice(tipo) {
   // Intento 3: datos.gob.ar (solo IPC)
   if (tipo === "IPC") {
     try {
+      console.log(`[fetchIndice] ${tipo}: Probando datos.gob.ar...`);
       const rows = await fetchDatosGobAr(tipo);
+      console.log(`[fetchIndice] ${tipo}: datos.gob.ar OK - ${rows.length} registros`);
       if (rows.length > 0) {
         console.log(`[indices] datos.gob.ar OK para ${tipo}: ${rows.length} registros`);
         return { rows, fuente: "datos.gob.ar" };
@@ -199,6 +216,7 @@ async function fetchIndice(tipo) {
     }
   }
 
+  console.error(`[fetchIndice] ${tipo}: Todas las fuentes fallaron: ${errores.join(" | ")}`);
   throw new Error(`Todas las fuentes fallaron para ${tipo}:\n${errores.join("\n")}`);
 }
 
@@ -215,14 +233,18 @@ router.post("/sync", async (req, res) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const resultados = { ICL: 0, IPC: 0, errores: [], fuentes: {} };
+    const resultados = { ICL: 0, IPC: 0, errores: [], fuentes: {}, logs: [] };
 
     for (const tipo of ["ICL", "IPC"]) {
       let fetchResult;
       try {
+        console.log(`[indices/sync] Iniciando fetch para ${tipo}...`);
         fetchResult = await fetchIndice(tipo);
+        console.log(`[indices/sync] ✅ ${tipo} OK - fuente: ${fetchResult.fuente}, registros obtenidos: ${fetchResult.rows.length}`);
       } catch (e) {
-        resultados.errores.push(`${tipo}: ${e.message}`);
+        const errMsg = `${tipo}: ${e.message}`;
+        resultados.errores.push(errMsg);
+        resultados.logs.push(`❌ ${errMsg}`);
         console.error(`[indices/sync] Error para ${tipo}:`, e.message);
         continue;
       }
@@ -233,7 +255,10 @@ router.post("/sync", async (req, res) => {
       for (const row of rows) {
         const periodo = row.fecha.slice(0, 7) + "-01";
         const valor = row.valor;
-        if (isNaN(valor) || valor <= 0) continue;
+        if (isNaN(valor) || valor <= 0) {
+          console.warn(`[indices/sync] ${tipo}: valor inválido skipped - fecha=${row.fecha}, valor=${valor}`);
+          continue;
+        }
 
         await conn.query(
           `INSERT INTO indices_historicos (tenant_id, tipo, periodo, valor)
@@ -243,6 +268,7 @@ router.post("/sync", async (req, res) => {
         );
         resultados[tipo]++;
       }
+      resultados.logs.push(`✅ ${tipo}: ${resultados[tipo]} registros insertados desde ${fuente}`);
     }
 
     await conn.commit();
@@ -253,6 +279,7 @@ router.post("/sync", async (req, res) => {
     );
 
     clearTimeout(globalTimeout);
+    console.log(`[indices/sync] ✅ Sincronización completada: ICL=${resultados.ICL}, IPC=${resultados.IPC}`);
     res.json({ ok: true, ...resultados, totalEnBD: countRow.total });
   } catch (err) {
     await conn.rollback();
@@ -316,7 +343,8 @@ router.get("/debug/status", async (req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT tipo, COUNT(*) as total, MAX(periodo) as ultimo, MIN(periodo) as primero
-       FROM indices_historicos GROUP BY tipo`
+       FROM indices_historicos WHERE tenant_id = ? GROUP BY tipo`,
+      [req.user.tenantId]
     );
     // ✅ Fix Bug #3: también aquí
     res.json(
@@ -327,6 +355,44 @@ router.get("/debug/status", async (req, res) => {
       }))
     );
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── GET /api/indices/debug/test-bcra ──────────────────────
+router.get("/debug/test-bcra", async (req, res) => {
+  try {
+    const tipo = req.query.tipo ?? "IPC";
+    console.log(`[debug/test-bcra] Testando BCRA para ${tipo}...`);
+    const rows = await fetchBCRA(tipo);
+    res.json({ ok: true, tipo, registros: rows.length, muestra: rows.slice(0, 3) });
+  } catch (err) {
+    console.error(`[debug/test-bcra] Error:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── GET /api/indices/debug/test-argentina-datos ────────────────
+router.get("/debug/test-argentina-datos", async (req, res) => {
+  try {
+    const tipo = req.query.tipo ?? "IPC";
+    console.log(`[debug/test-argentina-datos] Testando ArgentinaDatos para ${tipo}...`);
+    const rows = await fetchArgentinaDatos(tipo);
+    res.json({ ok: true, tipo, registros: rows.length, muestra: rows.slice(0, 3) });
+  } catch (err) {
+    console.error(`[debug/test-argentina-datos] Error:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── GET /api/indices/debug/test-gob-ar ──────────────────────
+router.get("/debug/test-gob-ar", async (req, res) => {
+  try {
+    console.log(`[debug/test-gob-ar] Testando datos.gob.ar para IPC...`);
+    const rows = await fetchDatosGobAr("IPC");
+    res.json({ ok: true, tipo: "IPC", registros: rows.length, muestra: rows.slice(0, 3) });
+  } catch (err) {
+    console.error(`[debug/test-gob-ar] Error:`, err.message);
     res.status(500).json({ error: err.message });
   }
 });
