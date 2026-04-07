@@ -10,88 +10,85 @@ router.get("/health", async (req, res) => {
   res.json({ ok: true, ts: new Date().toISOString() });
 });
 
-// Todas las rutas requieren autenticación y suscripción activa
 router.use(authMiddleware);
 router.use(subscriptionMiddleware);
 
-// ─── Helpers ─────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────
 function fmtFecha(date) {
   return date.toISOString().split("T")[0];
 }
 
-// ✅ Fix Bug #3: MySQL DATE → JS Date object → "Sat Jan 01..." 
 function fmtPeriodo(val) {
   if (!val) return null;
   if (val instanceof Date) return val.toISOString().slice(0, 10);
   return String(val).slice(0, 10);
 }
 
+// Fix: solo últimos 10 años — para alquileres no necesitamos datos de 1943
+const AÑOS_HISTORIAL = 10;
+function fechaDesde() {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - AÑOS_HISTORIAL);
+  return d.toISOString().slice(0, 10);
+}
+
 const BCRA_VAR_IDS = { ICL: 40, IPC: 29 };
 
-// ─── Fuente 1: BCRA via undici (único que bypasea SSL en Node 18+) ────────────
-// ✅ Fix Bug #1: fetch nativo ignora httpsAgent → todo pasa por undici
-// ✅ Fix Bug #2: AbortController con timeout explícito de 15s
+// ─── Fuente 1: BCRA (fetch nativo con SSL bypass via NODE_TLS_REJECT_UNAUTHORIZED) ──
+// Fix: eliminamos undici (no está instalado). Usamos fetch nativo con variable de entorno.
 async function fetchBCRA(tipo) {
+  const varId = BCRA_VAR_IDS[tipo];
+  if (!varId) throw new Error(`Variable ID no definida para ${tipo}`);
+
+  const hasta = new Date();
+  const desde = new Date();
+  desde.setMonth(desde.getMonth() - 18);
+
+  const url =
+    `https://api.bcra.gob.ar/estadisticas/v3.0/datosvariable/` +
+    `${varId}/${fmtFecha(desde)}/${fmtFecha(hasta)}`;
+
+  console.log(`[fetchBCRA] ${tipo}: Solicitando ${url}`);
+
+  // Bypass SSL para BCRA (certificado problemático conocido)
+  const prevTLS = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
   try {
-    const { Agent, fetch: undiciFetch } = await import("undici");
-    const agent = new Agent({ connect: { rejectUnauthorized: false } });
+    const res = await fetch(url, {
+      headers: { Accept: "application/json", "User-Agent": "PropManager/1.0" },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = prevTLS;
 
-    const varId = BCRA_VAR_IDS[tipo];
-    if (!varId) throw new Error(`Variable ID no definida para ${tipo}`);
-    
-    const hasta = new Date();
-    const desde = new Date();
-    desde.setMonth(desde.getMonth() - 18);
-
-    const url =
-      `https://api.bcra.gob.ar/estadisticas/v3.0/datosvariable/` +
-      `${varId}/${fmtFecha(desde)}/${fmtFecha(hasta)}`;
-    
-    console.log(`[fetchBCRA] ${tipo}: Solicitando ${url}`);
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-
-    try {
-      const res = await undiciFetch(url, {
-        headers: { Accept: "application/json", "User-Agent": "PropManager/1.0" },
-        dispatcher: agent,
-        signal: controller.signal, // ✅ ahora sí se usa
-      });
-      clearTimeout(timeout);
-
-      console.log(`[fetchBCRA] ${tipo}: Status ${res.status}`);
-
-      if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        throw new Error(`BCRA HTTP ${res.status}: ${body.slice(0, 200)}`);
-      }
-
-      const json = await res.json();
-      const results = json.results ?? json.data ?? [];
-
-      console.log(`[fetchBCRA] ${tipo}: Respuesta parseada, resultados encontrados: ${results.length}`);
-
-      if (!Array.isArray(results) || results.length === 0) {
-        throw new Error(`BCRA devolvió respuesta vacía para variable ${varId}`);
-      }
-
-      const filtered = results
-        .filter((r) => r.fecha && r.valor != null)
-        .map((r) => ({
-          fecha: String(r.fecha).slice(0, 10),
-          valor: parseFloat(r.valor),
-        }))
-        .filter((r) => !isNaN(r.valor));
-      
-      console.log(`[fetchBCRA] ${tipo}: Filtrados ${filtered.length} registros válidos`);
-      return filtered;
-    } catch (err) {
-      clearTimeout(timeout);
-      throw err;
+    console.log(`[fetchBCRA] ${tipo}: Status ${res.status}`);
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`BCRA HTTP ${res.status}: ${body.slice(0, 200)}`);
     }
-  } catch (e) {
-    throw new Error(`BCRA falló: ${e.message}`);
+
+    const json = await res.json();
+    const results = json.results ?? json.data ?? [];
+
+    if (!Array.isArray(results) || results.length === 0)
+      throw new Error(`BCRA devolvió respuesta vacía para variable ${varId}`);
+
+    const cutoff = fechaDesde();
+    const filtered = results
+      .filter((r) => r.fecha && r.valor != null && String(r.fecha) >= cutoff)
+      .map((r) => ({ fecha: String(r.fecha).slice(0, 10), valor: parseFloat(r.valor) }))
+      .filter((r) => !isNaN(r.valor) && isFinite(r.valor));
+
+    console.log(`[fetchBCRA] ${tipo}: ${filtered.length} registros válidos (últimos ${AÑOS_HISTORIAL} años)`);
+    return filtered;
+  } catch (err) {
+    clearTimeout(timeout);
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = prevTLS;
+    throw new Error(`BCRA falló: ${err.message}`);
   }
 }
 
@@ -120,16 +117,16 @@ async function fetchArgentinaDatos(tipo) {
       const json = await res.json();
 
       const items = Array.isArray(json) ? json : json.results ?? json.data ?? [];
+
+      // Fix: filtrar por fecha (solo últimos N años) y permitir negativos válidos
+      const cutoff = fechaDesde();
       const rows = items
-        .filter((r) => r.fecha && r.valor != null)
-        .map((r) => ({
-          fecha: String(r.fecha).slice(0, 10),
-          valor: parseFloat(r.valor),
-        }))
-        .filter((r) => !isNaN(r.valor));
+        .filter((r) => r.fecha && r.valor != null && String(r.fecha) >= cutoff)
+        .map((r) => ({ fecha: String(r.fecha).slice(0, 10), valor: parseFloat(r.valor) }))
+        .filter((r) => !isNaN(r.valor) && isFinite(r.valor));
 
       if (rows.length > 0) return rows;
-      throw new Error("Respuesta vacía");
+      throw new Error("Sin datos en el rango de fechas");
     } catch (e) {
       lastErr = e;
     }
@@ -147,7 +144,7 @@ async function fetchDatosGobAr(tipo) {
 
   try {
     const url =
-      "https://apis.datos.gob.ar/series/api/series/?ids=148.3_INIVELNAL_DICI_M_26&limit=24&format=json";
+      "https://apis.datos.gob.ar/series/api/series/?ids=148.3_INIVELNAL_DICI_M_26&limit=120&format=json";
     const res = await fetch(url, {
       headers: { Accept: "application/json" },
       signal: controller.signal,
@@ -157,13 +154,11 @@ async function fetchDatosGobAr(tipo) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
 
+    const cutoff = fechaDesde();
     return (json.data ?? [])
-      .filter((r) => r[0] && r[1] != null)
-      .map((r) => ({
-        fecha: String(r[0]).slice(0, 10),
-        valor: parseFloat(r[1]),
-      }))
-      .filter((r) => !isNaN(r.valor));
+      .filter((r) => r[0] && r[1] != null && String(r[0]) >= cutoff)
+      .map((r) => ({ fecha: String(r[0]).slice(0, 10), valor: parseFloat(r[1]) }))
+      .filter((r) => !isNaN(r.valor) && isFinite(r.valor));
   } catch (e) {
     clearTimeout(timeout);
     throw new Error(`datos.gob.ar falló: ${e.message}`);
@@ -174,11 +169,9 @@ async function fetchDatosGobAr(tipo) {
 async function fetchIndice(tipo) {
   const errores = [];
 
-  // Intento 1: BCRA via undici
   try {
     console.log(`[fetchIndice] ${tipo}: Probando BCRA...`);
     const rows = await fetchBCRA(tipo);
-    console.log(`[fetchIndice] ${tipo}: BCRA OK - ${rows.length} registros`);
     if (rows.length > 0) {
       console.log(`[indices] BCRA OK para ${tipo}: ${rows.length} registros`);
       return { rows, fuente: "BCRA" };
@@ -189,11 +182,9 @@ async function fetchIndice(tipo) {
     console.warn(`[indices] BCRA falló para ${tipo}: ${e1.message}`);
   }
 
-  // Intento 2: ArgentinaDatos
   try {
     console.log(`[fetchIndice] ${tipo}: Probando ArgentinaDatos...`);
     const rows = await fetchArgentinaDatos(tipo);
-    console.log(`[fetchIndice] ${tipo}: ArgentinaDatos OK - ${rows.length} registros`);
     if (rows.length > 0) {
       console.log(`[indices] ArgentinaDatos OK para ${tipo}: ${rows.length} registros`);
       return { rows, fuente: "ArgentinaDatos" };
@@ -204,12 +195,10 @@ async function fetchIndice(tipo) {
     console.warn(`[indices] ArgentinaDatos falló para ${tipo}: ${e2.message}`);
   }
 
-  // Intento 3: datos.gob.ar (solo IPC)
   if (tipo === "IPC") {
     try {
       console.log(`[fetchIndice] ${tipo}: Probando datos.gob.ar...`);
       const rows = await fetchDatosGobAr(tipo);
-      console.log(`[fetchIndice] ${tipo}: datos.gob.ar OK - ${rows.length} registros`);
       if (rows.length > 0) {
         console.log(`[indices] datos.gob.ar OK para ${tipo}: ${rows.length} registros`);
         return { rows, fuente: "datos.gob.ar" };
@@ -221,20 +210,17 @@ async function fetchIndice(tipo) {
     }
   }
 
-  console.error(`[fetchIndice] ${tipo}: Todas las fuentes fallaron: ${errores.join(" | ")}`);
   throw new Error(`Todas las fuentes fallaron para ${tipo}:\n${errores.join("\n")}`);
 }
 
 // ─── POST /api/indices/sync ───────────────────────────────────
 router.post("/sync", async (req, res) => {
-  // ✅ Fix Bug #4: timeout global — si algo interno se cuelga, el frontend
-  // recibe respuesta en lugar de esperar eternamente — 30s total timeout
   const globalTimeout = setTimeout(() => {
     if (!res.headersSent) {
-      console.warn("[indices/sync] Global timeout reached - responding with partial results");
-      res.json({ ok: true, ICL: 0, IPC: 0, errores: ["Timeout esperando APIs externas"], fuentes: {}, logs: ["Timeout"], totalEnBD: 0 });
+      console.warn("[indices/sync] Global timeout - respondiendo con resultado parcial");
+      res.json({ ok: false, ICL: 0, IPC: 0, errores: ["Timeout: las APIs externas tardaron demasiado"], fuentes: {}, logs: [], totalEnBD: 0 });
     }
-  }, 30000);
+  }, 60000); // 60s — suficiente para el batch insert
 
   const conn = await pool.getConnection();
   try {
@@ -246,7 +232,7 @@ router.post("/sync", async (req, res) => {
       try {
         console.log(`[indices/sync] Iniciando fetch para ${tipo}...`);
         fetchResult = await fetchIndice(tipo);
-        console.log(`[indices/sync] ✅ ${tipo} OK - fuente: ${fetchResult.fuente}, registros obtenidos: ${fetchResult.rows.length}`);
+        console.log(`[indices/sync] ✅ ${tipo} OK - fuente: ${fetchResult.fuente}, registros: ${fetchResult.rows.length}`);
       } catch (e) {
         const errMsg = `${tipo}: ${e.message}`;
         resultados.errores.push(errMsg);
@@ -258,23 +244,30 @@ router.post("/sync", async (req, res) => {
       const { rows, fuente } = fetchResult;
       resultados.fuentes[tipo] = fuente;
 
-      for (const row of rows) {
-        const periodo = row.fecha.slice(0, 7) + "-01";
-        const valor = row.valor;
-        if (isNaN(valor) || valor <= 0) {
-          console.warn(`[indices/sync] ${tipo}: valor inválido skipped - fecha=${row.fecha}, valor=${valor}`);
-          continue;
-        }
+      // Fix: batch insert en lugar de 1 query por fila — evita el timeout con 996 registros
+      const validRows = rows
+        .map((row) => {
+          const periodo = row.fecha.slice(0, 7) + "-01";
+          const valor = row.valor;
+          // Fix: permitir negativos válidos — solo excluir NaN e Infinity
+          if (!isFinite(valor) || isNaN(valor)) return null;
+          return [req.user.tenantId, tipo, periodo, valor];
+        })
+        .filter(Boolean);
 
+      if (validRows.length > 0) {
+        // Un solo INSERT con múltiples VALUES — mucho más rápido
         await conn.query(
           `INSERT INTO indices_historicos (tenant_id, tipo, periodo, valor)
-           VALUES (?, ?, ?, ?)
+           VALUES ?
            ON DUPLICATE KEY UPDATE valor = VALUES(valor)`,
-          [req.user.tenantId, tipo, periodo, valor]
+          [validRows]
         );
-        resultados[tipo]++;
+        resultados[tipo] = validRows.length;
       }
+
       resultados.logs.push(`✅ ${tipo}: ${resultados[tipo]} registros insertados desde ${fuente}`);
+      console.log(`[indices/sync] ${tipo}: ${resultados[tipo]} registros insertados`);
     }
 
     await conn.commit();
@@ -285,7 +278,7 @@ router.post("/sync", async (req, res) => {
     );
 
     clearTimeout(globalTimeout);
-    console.log(`[indices/sync] ✅ Sincronización completada: ICL=${resultados.ICL}, IPC=${resultados.IPC}`);
+    console.log(`[indices/sync] ✅ Completado: ICL=${resultados.ICL}, IPC=${resultados.IPC}`);
     res.json({ ok: true, ...resultados, totalEnBD: countRow.total });
   } catch (err) {
     await conn.rollback();
@@ -329,14 +322,7 @@ router.get("/debug/status", async (req, res) => {
        FROM indices_historicos WHERE tenant_id = ? GROUP BY tipo`,
       [req.user.tenantId]
     );
-    // ✅ Fix Bug #3: también aquí
-    res.json(
-      rows.map((r) => ({
-        ...r,
-        ultimo: fmtPeriodo(r.ultimo),
-        primero: fmtPeriodo(r.primero),
-      }))
-    );
+    res.json(rows.map((r) => ({ ...r, ultimo: fmtPeriodo(r.ultimo), primero: fmtPeriodo(r.primero) })));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -345,11 +331,9 @@ router.get("/debug/status", async (req, res) => {
 router.get("/debug/test-bcra", async (req, res) => {
   try {
     const tipo = req.query.tipo ?? "IPC";
-    console.log(`[debug/test-bcra] Testando BCRA para ${tipo}...`);
     const rows = await fetchBCRA(tipo);
     res.json({ ok: true, tipo, registros: rows.length, muestra: rows.slice(0, 3) });
   } catch (err) {
-    console.error(`[debug/test-bcra] Error:`, err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -357,27 +341,23 @@ router.get("/debug/test-bcra", async (req, res) => {
 router.get("/debug/test-argentina-datos", async (req, res) => {
   try {
     const tipo = req.query.tipo ?? "IPC";
-    console.log(`[debug/test-argentina-datos] Testando ArgentinaDatos para ${tipo}...`);
     const rows = await fetchArgentinaDatos(tipo);
     res.json({ ok: true, tipo, registros: rows.length, muestra: rows.slice(0, 3) });
   } catch (err) {
-    console.error(`[debug/test-argentina-datos] Error:`, err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 router.get("/debug/test-gob-ar", async (req, res) => {
   try {
-    console.log(`[debug/test-gob-ar] Testando datos.gob.ar para IPC...`);
     const rows = await fetchDatosGobAr("IPC");
     res.json({ ok: true, tipo: "IPC", registros: rows.length, muestra: rows.slice(0, 3) });
   } catch (err) {
-    console.error(`[debug/test-gob-ar] Error:`, err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// ─── GET /api/indices/:tipo (GENERIC ROUTE - MUST BE LAST) ─────
+// ─── GET /api/indices/:tipo (GENERIC ROUTE - MUST BE LAST) ────
 router.get("/:tipo", async (req, res) => {
   const tipo = req.params.tipo.toUpperCase();
   if (!["ICL", "IPC"].includes(tipo))
@@ -388,13 +368,7 @@ router.get("/:tipo", async (req, res) => {
        WHERE tipo = ? AND tenant_id = ? ORDER BY periodo DESC LIMIT 24`,
       [tipo, req.user.tenantId]
     );
-    // ✅ Fix Bug #3: fmtPeriodo evita "Sat Jan 01..." en la respuesta JSON
-    res.json(
-      rows.map((r) => ({
-        periodo: fmtPeriodo(r.periodo),
-        valor: parseFloat(r.valor),
-      }))
-    );
+    res.json(rows.map((r) => ({ periodo: fmtPeriodo(r.periodo), valor: parseFloat(r.valor) })));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

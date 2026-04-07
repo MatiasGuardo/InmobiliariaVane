@@ -5,7 +5,7 @@ import { Field, Input, Select } from "../components/ui/FormField";
 import { Badge }                from "../components/ui/Badge";
 import { DocumentsSection }     from "../components/ui/DocumentsSection";
 import { useDocuments }         from "../hooks/useDocuments";
-import { fmtCurrency, API }     from "../utils/helpers";
+import { fmtCurrency, API, apiCall }     from "../utils/helpers";
 
 const TIPOS = ["Departamento", "Casa", "Local Comercial", "Oficina", "Galpón", "Terreno", "Otro"];
 
@@ -207,14 +207,11 @@ export function Properties({ properties, setProperties, owners, leases, tenants,
     setSaving(true);
     try {
       const method = editing ? "PUT" : "POST";
-      const url    = editing ? `${API}/api/properties/${editing}` : `${API}/api/properties`;
-      const res    = await fetch(url, {
+      const url    = editing ? `/properties/${editing}` : `/properties`;
+      const saved = await apiCall(url, {
         method,
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, price: Number(form.price) }),
       });
-      if (!res.ok) throw new Error(await res.text());
-      const saved = await res.json();
       setProperties(prev => editing ? prev.map(p => p.id === editing ? saved : p) : [...prev, saved]);
       setModal(false);
     } catch (e) {
@@ -227,7 +224,7 @@ export function Properties({ properties, setProperties, owners, leases, tenants,
   const del = async (id) => {
     if (!confirm("¿Eliminar esta propiedad?")) return;
     try {
-      await fetch(`${API}/api/properties/${id}`, { method: "DELETE" });
+      await apiCall(`/properties/${id}`, { method: "DELETE" });
       setProperties(prev => prev.filter(p => p.id !== id));
     } catch (e) {
       alert("Error al eliminar: " + e.message);

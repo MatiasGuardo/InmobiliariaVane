@@ -5,7 +5,7 @@ import { Badge }              from "../components/ui/Badge";
 import { AjusteBadge, LeaseDetailModal } from "../components/leases/LeaseDetailModal";
 import { LeaseFormModal }     from "../components/leases/LeaseFormModal";
 import { IndicesPanel }       from "../components/leases/indicesPanel";
-import { fmtDate, fmtCurrency, diffDays, getAlertLevel, isValidDate, API } from "../utils/helpers";
+import { fmtDate, fmtCurrency, diffDays, getAlertLevel, isValidDate, API, apiCall } from "../utils/helpers";
 
 const TABS = ["activo", "vencido", "rescindido", "renovado", "todos"];
 
@@ -91,10 +91,9 @@ export function Leases({ properties, setProperties, owners, tenants, leases, set
     setFormErr("");
     try {
       const method = editing ? "PUT" : "POST";
-      const url    = editing ? `${API}/api/leases/${editing}` : `${API}/api/leases`;
-      const res    = await fetch(url, {
+      const url    = editing ? `/leases/${editing}` : `/leases`;
+      const saved = await apiCall(url, {
         method,
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           propertyId:   form.propertyId,
           tenantId:     form.tenantId,
@@ -108,11 +107,6 @@ export function Leases({ properties, setProperties, owners, tenants, leases, set
           status:       form.status,
         }),
       });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || `HTTP ${res.status}`);
-      }
-      const saved = await res.json();
       if (editing) {
         setLeases(prev => prev.map(l => l.id === editing ? { ...l, ...saved } : l));
       } else {
@@ -132,8 +126,7 @@ export function Leases({ properties, setProperties, owners, tenants, leases, set
   const del = async (id) => {
     if (!confirm("¿Eliminar este contrato? Esta acción no se puede deshacer.")) return;
     try {
-      const res = await fetch(`${API}/api/leases/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(await res.text());
+      await apiCall(`/leases/${id}`, { method: "DELETE" });
       const deleted = leases.find(l => l.id === id);
       setLeases(prev => prev.filter(l => l.id !== id));
       if (deleted) {
@@ -148,12 +141,10 @@ export function Leases({ properties, setProperties, owners, tenants, leases, set
 
   const updateStatus = async (id, status) => {
     try {
-      const res = await fetch(`${API}/api/leases/${id}/status`, {
+      await apiCall(`/leases/${id}/status`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      if (!res.ok) throw new Error(await res.text());
       setLeases(prev => prev.map(l => l.id === id ? { ...l, status } : l));
     } catch (e) {
       alert("Error: " + e.message);

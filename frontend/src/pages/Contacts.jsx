@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { Modal }                from "../components/ui/Modal";
 import { Field, Input, Select } from "../components/ui/FormField";
-import { fmtDate, API }         from "../utils/helpers";
+import { fmtDate, API, apiCall }         from "../utils/helpers";
 
 // ─── Modal de detalle de contacto ────────────────────────────
 function ContactDetailModal({ person, tab, properties, leases, onClose, onEdit, onDelete }) {
@@ -235,17 +235,14 @@ export function Contacts({ owners, setOwners, tenants, setTenants, properties, l
     if (err) { setFormError(err); return; }
     setSaving(true);
     setFormError("");
-    const endpoint = form.role === "owner" ? "/api/owners" : "/api/tenants";
+    const endpoint = form.role === "owner" ? "owners" : "tenants";
     const method   = editing ? "PUT" : "POST";
-    const url      = editing ? `${API}${endpoint}/${editing}` : `${API}${endpoint}`;
+    const url      = editing ? `/${endpoint}/${editing}` : `/${endpoint}`;
     try {
-      const res = await fetch(url, {
+      const saved = await apiCall(url, {
         method,
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: form.name, email: form.email, phone: form.phone, document: form.document }),
       });
-      if (!res.ok) throw new Error(await res.text());
-      const saved = await res.json();
       if (form.role === "owner") {
         setOwners(prev => editing ? prev.map(o => o.id === editing ? saved : o) : [...prev, saved]);
       } else {
@@ -262,10 +259,9 @@ export function Contacts({ owners, setOwners, tenants, setTenants, properties, l
 
   const del = async (id) => {
     if (!confirm("¿Eliminar este contacto?")) return;
-    const endpoint = tab === "owners" ? `/api/owners/${id}` : `/api/tenants/${id}`;
+    const endpoint = tab === "owners" ? "owners" : "tenants";
     try {
-      const res = await fetch(`${API}${endpoint}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(await res.text());
+      await apiCall(`/${endpoint}/${id}`, { method: "DELETE" });
       if (tab === "owners") setOwners(prev => prev.filter(o => o.id !== id));
       else                  setTenants(prev => prev.filter(t => t.id !== id));
     } catch (e) {
