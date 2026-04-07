@@ -315,30 +315,7 @@ router.post("/", async (req, res) => {
   }
 });
 
-// ─── GET /api/indices/:tipo ───────────────────────────────────
-router.get("/:tipo", async (req, res) => {
-  const tipo = req.params.tipo.toUpperCase();
-  if (!["ICL", "IPC"].includes(tipo))
-    return res.status(400).json({ error: "Tipo inválido" });
-  try {
-    const [rows] = await pool.query(
-      `SELECT periodo, valor FROM indices_historicos
-       WHERE tipo = ? AND tenant_id = ? ORDER BY periodo DESC LIMIT 24`,
-      [tipo, req.user.tenantId]
-    );
-    // ✅ Fix Bug #3: fmtPeriodo evita "Sat Jan 01..." en la respuesta JSON
-    res.json(
-      rows.map((r) => ({
-        periodo: fmtPeriodo(r.periodo),
-        valor: parseFloat(r.valor),
-      }))
-    );
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ─── GET /api/indices/debug/status ───────────────────────────
+// ─── DEBUG ROUTES (MUST BE BEFORE /:tipo) ─────────────────────
 router.get("/debug/status", async (req, res) => {
   try {
     const [rows] = await pool.query(
@@ -359,7 +336,6 @@ router.get("/debug/status", async (req, res) => {
   }
 });
 
-// ─── GET /api/indices/debug/test-bcra ──────────────────────
 router.get("/debug/test-bcra", async (req, res) => {
   try {
     const tipo = req.query.tipo ?? "IPC";
@@ -372,7 +348,6 @@ router.get("/debug/test-bcra", async (req, res) => {
   }
 });
 
-// ─── GET /api/indices/debug/test-argentina-datos ────────────────
 router.get("/debug/test-argentina-datos", async (req, res) => {
   try {
     const tipo = req.query.tipo ?? "IPC";
@@ -385,7 +360,6 @@ router.get("/debug/test-argentina-datos", async (req, res) => {
   }
 });
 
-// ─── GET /api/indices/debug/test-gob-ar ──────────────────────
 router.get("/debug/test-gob-ar", async (req, res) => {
   try {
     console.log(`[debug/test-gob-ar] Testando datos.gob.ar para IPC...`);
@@ -393,6 +367,29 @@ router.get("/debug/test-gob-ar", async (req, res) => {
     res.json({ ok: true, tipo: "IPC", registros: rows.length, muestra: rows.slice(0, 3) });
   } catch (err) {
     console.error(`[debug/test-gob-ar] Error:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── GET /api/indices/:tipo (GENERIC ROUTE - MUST BE LAST) ─────
+router.get("/:tipo", async (req, res) => {
+  const tipo = req.params.tipo.toUpperCase();
+  if (!["ICL", "IPC"].includes(tipo))
+    return res.status(400).json({ error: "Tipo inválido" });
+  try {
+    const [rows] = await pool.query(
+      `SELECT periodo, valor FROM indices_historicos
+       WHERE tipo = ? AND tenant_id = ? ORDER BY periodo DESC LIMIT 24`,
+      [tipo, req.user.tenantId]
+    );
+    // ✅ Fix Bug #3: fmtPeriodo evita "Sat Jan 01..." en la respuesta JSON
+    res.json(
+      rows.map((r) => ({
+        periodo: fmtPeriodo(r.periodo),
+        valor: parseFloat(r.valor),
+      }))
+    );
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
