@@ -5,6 +5,11 @@ import { subscriptionMiddleware } from "../middleware/subscription.js";
 
 const router = Router();
 
+// ─── GET /api/indices/health (PUBLIC - no auth required) ──────
+router.get("/health", async (req, res) => {
+  res.json({ ok: true, ts: new Date().toISOString() });
+});
+
 // Todas las rutas requieren autenticación y suscripción activa
 router.use(authMiddleware);
 router.use(subscriptionMiddleware);
@@ -226,7 +231,8 @@ router.post("/sync", async (req, res) => {
   // recibe respuesta en lugar de esperar eternamente — 30s total timeout
   const globalTimeout = setTimeout(() => {
     if (!res.headersSent) {
-      res.status(504).json({ error: "Timeout: las APIs de índices tardaron demasiado" });
+      console.warn("[indices/sync] Global timeout reached - responding with partial results");
+      res.json({ ok: true, ICL: 0, IPC: 0, errores: ["Timeout esperando APIs externas"], fuentes: {}, logs: ["Timeout"], totalEnBD: 0 });
     }
   }, 30000);
 
