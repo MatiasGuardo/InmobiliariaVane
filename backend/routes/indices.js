@@ -45,7 +45,7 @@ async function fetchBCRA(tipo) {
     console.log(`[fetchBCRA] ${tipo}: Solicitando ${url}`);
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    const timeout = setTimeout(() => controller.abort(), 8000);
 
     try {
       const res = await undiciFetch(url, {
@@ -103,7 +103,7 @@ async function fetchArgentinaDatos(tipo) {
   for (const url of urls) {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
+      const timeout = setTimeout(() => controller.abort(), 7000);
 
       const res = await fetch(url, {
         headers: { Accept: "application/json", "User-Agent": "PropManager/1.0" },
@@ -138,7 +138,7 @@ async function fetchDatosGobAr(tipo) {
   if (tipo !== "IPC") throw new Error("datos.gob.ar solo tiene IPC");
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
+  const timeout = setTimeout(() => controller.abort(), 7000);
 
   try {
     const url =
@@ -223,12 +223,12 @@ async function fetchIndice(tipo) {
 // ─── POST /api/indices/sync ───────────────────────────────────
 router.post("/sync", async (req, res) => {
   // ✅ Fix Bug #4: timeout global — si algo interno se cuelga, el frontend
-  // recibe respuesta en lugar de esperar eternamente
+  // recibe respuesta en lugar de esperar eternamente — 30s total timeout
   const globalTimeout = setTimeout(() => {
     if (!res.headersSent) {
-      res.status(504).json({ error: "Timeout: la sincronización tardó demasiado" });
+      res.status(504).json({ error: "Timeout: las APIs de índices tardaron demasiado" });
     }
-  }, 60000);
+  }, 30000);
 
   const conn = await pool.getConnection();
   try {

@@ -1,6 +1,6 @@
 // frontend/src/hooks/useIndice.js
 import { useState, useEffect, useCallback, useRef } from "react";
-import { API } from "../utils/helpers";
+import { apiCall } from "../utils/helpers";
 
 export function useIndice(tipo) {
   const [rows, setRows] = useState([]);
@@ -28,13 +28,9 @@ export function useIndice(tipo) {
     try {
       // Cache-buster para evitar respuestas cacheadas por el navegador
       const ts = Date.now();
-      const res = await fetch(`${API}/indices/${tipo}?_t=${ts}`, {
+      const data = await apiCall(`/indices/${tipo}?_t=${ts}`, {
         signal: controller.signal,
-        headers: { "Cache-Control": "no-cache" },
       });
-
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
       setRows(Array.isArray(data) ? data : []);
     } catch (e) {
       if (e.name === "AbortError") return; // request cancelado intencionalmente
