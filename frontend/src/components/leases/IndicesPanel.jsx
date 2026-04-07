@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { TrendingUp, ChevronRight, RefreshCw, ExternalLink, Calculator, Check } from "lucide-react";
 import { SyncIndicesButton } from "./ajusteSelector";
 import { AjusteCalculadora } from "./ajusteCalculadora";
-import { API } from "../../utils/helpers";
+import { apiCall } from "../../utils/helpers";
 
 // ─── Helper ───────────────────────────────────────────────────
 function SmallInput({ label, ...props }) {
@@ -47,9 +47,8 @@ function IPCCard({ onDataChange }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/indices/IPC`);
-      if (!res.ok) return;
-      setRows(await res.json());
+      const rows = await apiCall(`/indices/IPC`);
+      setRows(rows);
     } catch { /* silent */ } finally {
       setLoading(false);
     }
@@ -155,9 +154,7 @@ function ICLCard({ onDataChange }) {
 
   const loadLast = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/indices/ICL`);
-      if (!res.ok) return;
-      const rows = await res.json();
+      const rows = await apiCall(`/indices/ICL`);
       if (rows?.[0]) setLastSaved(rows[0]);
     } catch { /* silent */ }
   }, []);
@@ -169,12 +166,10 @@ function ICLCard({ onDataChange }) {
     setSaving(true);
     setSaved(null);
     try {
-      const res = await fetch(`${API}/api/indices`, {
+      await apiCall(`/indices`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tipo: "ICL", periodo: hasta, valor: parseFloat(variacion) }),
       });
-      if (!res.ok) throw new Error(await res.text());
       setSaved({ ok: true, msg: `✓ ICL ${hasta.slice(0, 7)} = ${variacion}% guardado` });
       await loadLast();
       onDataChange?.();

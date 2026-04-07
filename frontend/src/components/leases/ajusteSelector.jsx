@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Field, Input } from "../ui/FormField";
 import { useIndice } from "../../hooks/useIndice";
 import { AjusteCalculadora } from "./ajusteCalculadora";
-import { API } from "../../utils/helpers";
+import { apiCall } from "../../utils/helpers";
 
 // ─── Helper: format periodo seguro ───────────────────────────
 function fmtPeriodo(val) {
@@ -26,9 +26,7 @@ export function SyncIndicesButton({ onSuccess, compact = false }) {
     setSyncing(true);
     setResult(null);
     try {
-      const res  = await fetch(`${API}/api/indices/sync`, { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      const data = await apiCall(`/indices/sync`, { method: "POST" });
 
       const hasData = (data.ICL ?? 0) > 0 || (data.IPC ?? 0) > 0;
       const fuentes = data.fuentes
@@ -87,12 +85,10 @@ function SinDatosFallback({ tipo, onSuccess }) {
     if (!mes || !val) return;
     setSaving(true);
     try {
-      const res = await fetch(`${API}/api/indices`, {
+      await apiCall(`/indices`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tipo, periodo: mes, valor: parseFloat(val) }),
       });
-      if (!res.ok) throw new Error(await res.text());
       setSaved(`✓ ${tipo} ${mes.slice(0, 7)} = ${val} guardado`);
       setMes(""); setVal("");
       onSuccess?.();

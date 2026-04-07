@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AlertTriangle, Calendar, CheckCircle, DollarSign, Search, X, Phone, Mail, MapPin, Percent, RotateCcw, FileText } from "lucide-react";
-import { fmtDate, fmtCurrency, fmtDuration, diffDays, getAlertLevel } from "../utils/helpers";
+import { fmtDate, fmtCurrency, fmtDuration, diffDays, getAlertLevel, apiCall } from "../utils/helpers";
 
 // ─── Modal de detalle de alerta ───────────────────────────────
 function AlertDetailModal({ alert, onClose, onGoToContract }) {
@@ -454,8 +454,7 @@ export function IndicesAdmin() {
     setSyncing(true);
     setStatus(null);
     try {
-      const res = await fetch(`${API}/api/indices/sync`, { method: "POST" });
-      const data = await res.json();
+      const data = await apiCall(`/indices/sync`, { method: "POST" });
       setStatus({ ok: true, msg: `Sincronizado — ICL: ${data.ICL} registros, IPC: ${data.IPC} registros` });
     } catch (e) {
       setStatus({ ok: false, msg: e.message });
@@ -467,12 +466,10 @@ export function IndicesAdmin() {
   const saveManual = async () => {
     if (!periodo || !valor) return;
     try {
-      const res = await fetch(`${API}/api/indices`, {
+      await apiCall(`/indices`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tipo, periodo, valor: parseFloat(valor) }),
+        body: { tipo, periodo, valor: parseFloat(valor) },
       });
-      if (!res.ok) throw new Error(await res.text());
       setStatus({ ok: true, msg: `Guardado: ${tipo} ${periodo.slice(0,7)} = ${valor}` });
       setValor("");
     } catch (e) {
