@@ -2,7 +2,7 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { mapProperty, mapTipoDB } from "../mappers.js";
 import { authMiddleware } from "../middleware/auth.js";
-import { subscriptionMiddleware } from "../middleware/subscription.js";
+import { subscriptionMiddleware, checkLimits } from "../middleware/subscription.js";
 
 const router = Router();
 
@@ -27,8 +27,8 @@ router.get("/", async (req, res) => {
   }
 });
 
-// POST /api/properties
-router.post("/", async (req, res) => {
+// POST /api/properties — verifica límite de propiedades antes de crear
+router.post("/", checkLimits('propiedades'), async (req, res) => {
   const { address, type, price, status, ownerId } = req.body;
   if (!address || !price || !ownerId)
     return res.status(400).json({ error: "Faltan campos: address, price, ownerId" });

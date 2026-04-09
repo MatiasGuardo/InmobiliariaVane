@@ -2,7 +2,7 @@ import { Router } from "express";
 import { pool, columnExists }    from "../db.js";
 import { mapLease } from "../mappers.js";
 import { authMiddleware } from "../middleware/auth.js";
-import { subscriptionMiddleware } from "../middleware/subscription.js";
+import { subscriptionMiddleware, checkLimits } from "../middleware/subscription.js";
 
 const router = Router();
 
@@ -12,14 +12,12 @@ router.use(subscriptionMiddleware);
 
 // ─── Helpers ─────────────────────────────────────────────────
 
-// Construye el string legado para compatibilidad con registros FIJO viejos
 function buildIndiceAjuste(increase, period) {
   if (!increase) return null;
   const p = ["trimestral", "cuatrimestral", "semestral", "anual"].includes(period) ? period : "anual";
   return `${increase}% ${p}`;
 }
 
-// Obtiene el valor más reciente del índice <= fecha dada
 async function getIndiceBase(conn, tipo, fecha) {
   const primerDia = fecha.slice(0, 7) + "-01";
   const [rows] = await conn.query(
@@ -31,7 +29,6 @@ async function getIndiceBase(conn, tipo, fecha) {
   return rows.length ? parseFloat(rows[0].valor) : null;
 }
 
-// Calcula la próxima fecha de actualización a partir de una fecha base
 function calcProximaActualizacion(fechaInicio, periodo) {
   const months = { trimestral: 3, cuatrimestral: 4, semestral: 6, anual: 12 }[periodo] ?? 12;
   const d = new Date(fechaInicio);
@@ -54,15 +51,14 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ─── POST /api/leases ─────────────────────────────────────────
-router.post("/", async (req, res) => {
+// ─── POST /api/leases — verifica límite de contratos antes de crear ───
+router.post("/", checkLimits('contratos'), async (req, res) => {
   const {
     propertyId, tenantId, startDate, endDate, rent,
-    // Ajuste
-    tipoAjuste = "FIJO",   // "FIJO" | "ICL" | "IPC"
-    increase,              // solo para FIJO
-    iclVariacion,          // % por período para ICL (ingresado manualmente)
-    period = "anual",      // trimestral | cuatrimestral | semestral | anual
+    tipoAjuste = "FIJO",
+    increase,
+    iclVariacion,
+    period = "anual",
   } = req.body;
 
   if (!propertyId || !tenantId || !startDate || !endDate || !rent)
@@ -77,7 +73,6 @@ router.post("/", async (req, res) => {
     );
     if (!prop) throw new Error("Propiedad no encontrada");
 
-    // Validar que el inquilino tenga email válido
     const [[tenant]] = await conn.query(
       "SELECT email FROM personas WHERE id = ? AND activo = 1 AND tenant_id = ?", [tenantId, req.user.tenantId]
     );
@@ -85,9 +80,6 @@ router.post("/", async (req, res) => {
     if (!tenant.email || !tenant.email.includes("@"))
       throw new Error("El inquilino debe tener un email válido para crear un contrato");
 
-    // ── Índice base ──
-    // ICL: el usuario ingresa la variación manualmente → se guarda directamente como porcentaje
-    // IPC: necesita el valor histórico base para comparar al momento del ajuste
     let indiceBaseValor = null;
     let indiceBaseFecha = null;
     if (tipoAjuste === "ICL") {
@@ -104,22 +96,15 @@ router.post("/", async (req, res) => {
       indiceBaseFecha = startDate.slice(0, 7) + "-01";
     }
 
-    // ── Próxima actualización ──
     const proximaActualizacion = calcProximaActualizacion(startDate, period);
-
-    // ── String legado (compatibilidad) ──
     const indiceAjuste = tipoAjuste === "FIJO"
       ? buildIndiceAjuste(increase, period)
       : null;
 
-    // ── Columnas nuevas (si existen en la BD) ──
-    // Intentamos escribir en tipo_ajuste / periodo_ajuste / porcentaje_ajuste
-    // Si las columnas no existen, caemos al modo legado graciosamente
+    const hasNewCols = await columnExists("contratos", "tipo_ajuste");
+
     let insertQuery;
     let insertParams;
-
-    // Verificar si existen las columnas nuevas (cacheado en db.js)
-    const hasNewCols = await columnExists("contratos", "tipo_ajuste");
 
     if (hasNewCols) {
       insertQuery = `
@@ -140,7 +125,6 @@ router.post("/", async (req, res) => {
         indiceBaseFecha, indiceBaseValor, proximaActualizacion,
       ];
     } else {
-      // Fallback: solo columnas legacy
       insertQuery = `
         INSERT INTO contratos
           (tenant_id, propiedad_id, inquilino_id, propietario_id, fecha_inicio, fecha_fin,
@@ -210,7 +194,6 @@ router.put("/:id", async (req, res) => {
     );
     if (!prop) throw new Error("Propiedad no encontrada");
 
-    // Validar que el inquilino tenga email válido
     const [[tenant]] = await conn.query(
       "SELECT email FROM personas WHERE id = ? AND activo = 1 AND tenant_id = ?", [tenantId, req.user.tenantId]
     );
@@ -236,7 +219,6 @@ router.put("/:id", async (req, res) => {
     const proximaActualizacion = calcProximaActualizacion(startDate, period);
     const indiceAjuste = tipoAjuste === "FIJO" ? buildIndiceAjuste(increase, period) : null;
 
-    // Verificar si existen las columnas nuevas (cacheado en db.js)
     const hasNewCols = await columnExists("contratos", "tipo_ajuste");
 
     if (hasNewCols) {
@@ -364,7 +346,6 @@ router.patch("/:id/status", async (req, res) => {
 });
 
 // ─── GET /api/leases/indices/:tipo ───────────────────────────
-// Devuelve los últimos 12 registros del índice para mostrar en el frontend
 router.get("/indices/:tipo", async (req, res) => {
   const tipo = req.params.tipo.toUpperCase();
   if (!["ICL", "IPC"].includes(tipo))
