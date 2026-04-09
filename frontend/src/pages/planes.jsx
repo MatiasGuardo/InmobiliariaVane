@@ -2,10 +2,9 @@
 import { useState, useEffect } from 'react';
 
 const FEATURES = {
-  Gratis: [
-    '✓ Hasta 3 propiedades',
-    '✓ Hasta 3 contratos activos',
-    '✓ Hasta 3 contactos',
+  Starter: [                           // ← era "Gratis"
+    '✓ Hasta 10 propiedades',
+    '✓ Hasta 10 contratos activos',
     '✓ 1 usuario',
     '✗ Reportes',
     '✗ Automatizaciones',
@@ -16,13 +15,13 @@ const FEATURES = {
     '✓ Hasta 200 contactos',
     '✓ Hasta 5 usuarios',
     '✓ Reportes incluidos',
-    '✓ Automatizaciones',
+    '✗ Automatizaciones',
   ],
-  Enterprise: [
-    '✓ Propiedades ilimitadas',
+  Premium: [                           // ← era "Enterprise"
+    '✓ Hasta 500 propiedades',
     '✓ Contratos ilimitados',
     '✓ Contactos ilimitados',
-    '✓ Usuarios ilimitados',
+    '✓ Hasta 20 usuarios',
     '✓ Reportes incluidos',
     '✓ Automatizaciones',
   ],

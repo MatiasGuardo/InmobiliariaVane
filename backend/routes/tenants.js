@@ -2,11 +2,13 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { mapTenant, splitName } from "../mappers.js";
 import { authMiddleware } from "../middleware/auth.js";
+import { subscriptionMiddleware, checkLimits } from "../middleware/subscription.js";
 
 const router = Router();
 
 // Todas las rutas requieren autenticación
 router.use(authMiddleware);
+router.use(subscriptionMiddleware);
 
 // GET /api/tenants
 router.get("/", async (req, res) => {
@@ -25,8 +27,8 @@ router.get("/", async (req, res) => {
   }
 });
 
-// POST /api/tenants
-router.post("/", async (req, res) => {
+// POST /api/tenants — verifica límite de contactos antes de crear
+router.post("/", checkLimits('contactos'), async (req, res) => {
   const { name, email, phone, document } = req.body;
   if (!name || !email) return res.status(400).json({ error: "Faltan campos: name, email" });
   if (!email.includes("@")) return res.status(400).json({ error: "Ingrese un mail válido" });

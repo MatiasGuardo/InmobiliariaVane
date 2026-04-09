@@ -21,19 +21,38 @@ export async function getPlanById(planId) {
   return planes.length > 0 ? planes[0] : null;
 }
 
+/**
+ * Devuelve los límites del plan activo de un usuario.
+ * Retorna { max_propiedades, max_contratos, max_contactos, max_usuarios }
+ * NULL en cualquier campo significa ilimitado.
+ */
+export async function getPlanLimits(usuarioId, tenantId) {
+  const [rows] = await pool.query(
+    `SELECT p.max_propiedades, p.max_contratos, p.max_contactos, p.max_usuarios
+     FROM suscripciones s
+     JOIN planes p ON p.id = s.plan_id
+     WHERE s.usuario_id = ? AND s.tenant_id = ?
+       AND s.estado = 'activo' AND s.fecha_fin >= CURDATE()
+     ORDER BY s.created_at DESC
+     LIMIT 1`,
+    [usuarioId, tenantId]
+  );
+  return rows.length > 0 ? rows[0] : null;
+}
+
 // ─────────────────────────────────────────────
 // SUSCRIPCIONES
 // ─────────────────────────────────────────────
 
 /**
- * Asigna el plan Gratis automáticamente al registrarse.
- * Fecha_fin = 100 años (equivale a "sin vencimiento" para plan gratuito).
+ * Asigna el plan Starter automáticamente al registrarse.
+ * Fecha_fin = 100 años (equivale a "sin vencimiento" para plan Starter).
  */
 export async function assignFreePlan(usuarioId, tenantId) {
   const [planes] = await pool.query(
-    "SELECT id FROM planes WHERE nombre = 'Gratis' AND activo = TRUE LIMIT 1"
+    "SELECT id FROM planes WHERE nombre IN ('Starter', 'Gratis') AND activo = TRUE LIMIT 1"
   );
-  if (!planes.length) throw new Error('Plan gratuito no configurado en la BD. Ejecutá la migración 003-planes-setup.sql');
+  if (!planes.length) throw new Error('Plan Starter/Gratis no configurado en la BD. Ejecutá la migración 002-add-suscripciones.sql');
 
   const planId = planes[0].id;
   const fechaFin = new Date();
