@@ -11,6 +11,7 @@ import { useTheme }      from "./hooks/useTheme";
 import { useAlerts }     from "./hooks/useAlerts";
 import { useAuth }       from "./hooks/useAuth";
 import Login             from "./pages/Login";
+import Planes            from "./pages/planes";
 
 // AuthContext para acceso global a autenticación
 export const AuthContext = createContext(null);
@@ -21,21 +22,16 @@ export default function App() {
   const [leaseFilter, setLeaseFilter] = useState("activo");
   const { dark, toggleDark } = useTheme();
 
-  // ✅ useAuth siempre se llama primero — incluye loading mientras lee localStorage
   const auth = useAuth();
 
-  // ✅ Todos los useApi siempre se llaman (regla de hooks: nunca después de un return condicional)
-  // Cuando el usuario no está autenticado, useApi no va a hacer fetch igual
-  // porque el token no existe, pero los hooks deben existir siempre.
   const { data: properties, setData: setProperties, loading: lProps,   error: eProps,   reload: reloadProps }   = useApi(auth.token ? "/properties" : null, auth.token);
   const { data: owners,     setData: setOwners,     loading: lOwners,  error: eOwners,  reload: reloadOwners }  = useApi(auth.token ? "/owners"     : null, auth.token);
   const { data: tenants,    setData: setTenants,    loading: lTenants, error: eTenants, reload: reloadTenants } = useApi(auth.token ? "/tenants"    : null, auth.token);
   const { data: leases,     setData: setLeases,     loading: lLeases,  error: eLeases,  reload: reloadLeases }  = useApi(auth.token ? "/leases"     : null, auth.token);
-  const { data: subscription, loading: lSub } = useApi(auth.token ? "/subscriptions/mi-suscripcion" : null, auth.token);
+  const { data: subscription, loading: lSub } = useApi(auth.token ? "/subscriptions/mi-plan" : null, auth.token);
 
   const { badgeCount, dismiss, activeAlerts } = useAlerts(leases);
 
-  // ✅ Esperar a que useAuth termine de leer localStorage antes de decidir qué mostrar
   if (auth.loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
@@ -44,11 +40,10 @@ export default function App() {
     );
   }
 
-  // ✅ Si no hay sesión, mostrar login
   if (!auth.user) {
     return (
       <Login
-        onLoginSuccess={() => {/* auth.user se actualiza solo vía useAuth */}}
+        onLoginSuccess={() => {}}
         auth={auth}
       />
     );
@@ -125,6 +120,7 @@ export default function App() {
             {active === "contacts"      && <Contacts      {...shared} />}
             {active === "leases"        && <Leases        {...shared} initialTab={leaseFilter} />}
             {active === "notifications" && <Notifications {...shared} activeAlerts={activeAlerts} dismiss={dismiss} setActive={handleSetActive} />}
+            {active === "planes"        && <Planes token={auth.token} />}
           </div>
         </main>
       </div>

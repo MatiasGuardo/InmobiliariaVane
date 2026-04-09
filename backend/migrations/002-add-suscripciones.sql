@@ -95,9 +95,9 @@ CREATE TABLE IF NOT EXISTS pagos (
 
 INSERT IGNORE INTO planes (id, nombre, descripcion, precio_mensual, precio_anual, limite_propiedades, limite_usuarios, include_reportes, include_automatizacion, activo) 
 VALUES 
-  (1, 'Starter', 'Plan básico para pequeñas inmobiliarias', 29.99, 299.90, 10, 1, FALSE, FALSE, TRUE),
-  (2, 'Pro', 'Plan profesional con más features', 79.99, 799.90, 50, 5, TRUE, FALSE, TRUE),
-  (3, 'Premium', 'Plan completo con todas las features', 199.99, 1999.90, 500, 20, TRUE, TRUE, TRUE);
+  (1, 'Starter', 'Plan básico para pequeñas inmobiliarias', 5000, 299.90, 10, 1, FALSE, FALSE, TRUE),
+  (2, 'Pro', 'Plan profesional con más features', 25000, 799.90, 50, 5, TRUE, FALSE, TRUE),
+  (3, 'Premium', 'Plan completo con todas las features', 50000, 1999.90, 500, 20, TRUE, TRUE, TRUE);
 
 -- Paso 4: Crear suscripción para el tenant default (admin - 1 año gratis)
 -- ─────────────────────────────────────────────────────────────────────

@@ -86,8 +86,8 @@ export function Sidebar({ active, setActive, alertCount, dark, toggleDark, user,
                 {subscription?.plan_nombre || 'Sin plan'}
               </p>
             </div>
-            <ChevronDown 
-              size={16} 
+            <ChevronDown
+              size={16}
               className={`text-gray-400 dark:text-gray-500 transition-transform flex-shrink-0 ${userMenuOpen ? 'rotate-180' : ''}`}
             />
           </button>
@@ -98,7 +98,7 @@ export function Sidebar({ active, setActive, alertCount, dark, toggleDark, user,
               <button
                 onClick={() => {
                   setUserMenuOpen(false);
-                  // TODO: Abrir modal de ajustes
+                  // TODO: Abrir modal de ajustes de cuenta
                 }}
                 className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
               >
@@ -109,7 +109,7 @@ export function Sidebar({ active, setActive, alertCount, dark, toggleDark, user,
               <button
                 onClick={() => {
                   setUserMenuOpen(false);
-                  // TODO: Abrir modal de planes
+                  setActive("planes");
                 }}
                 className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors font-medium"
               >
