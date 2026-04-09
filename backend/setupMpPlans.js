@@ -12,8 +12,9 @@ import { pool } from './db.js';
 import { createMpPlan } from './services/mpService.js';
 
 const PLANES_PAGOS = [
-  { nombre: 'Pro',        monto: 9900  },
-  { nombre: 'Enterprise', monto: 24900 },
+  { nombre: 'Starter', monto: 5000  },  // $5.000 ARS
+  { nombre: 'Pro',     monto: 25000 },  // $25.000 ARS
+  { nombre: 'Premium', monto: 50000 },  // $50.000 ARS
 ];
 
 async function setup() {
