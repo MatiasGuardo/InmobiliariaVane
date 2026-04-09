@@ -41,13 +41,18 @@ export default function App() {
   }
 
   if (!auth.user) {
-    return (
-      <Login
-        onLoginSuccess={() => {}}
-        auth={auth}
-      />
-    );
-  }
+  // Detectar redirect del backend tras verificar email
+  const params = new URLSearchParams(window.location.search);
+  const verified = params.get('verified');
+
+  return (
+    <Login
+      onLoginSuccess={() => {}}
+      auth={auth}
+      verifiedStatus={verified} // "1" = ok, "error" = falló
+    />
+  );
+}
 
   const dataLoading = lProps || lOwners || lTenants || lLeases;
   const dataError   = eProps || eOwners || eTenants || eLeases;
