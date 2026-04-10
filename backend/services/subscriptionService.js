@@ -140,47 +140,62 @@ export async function initiateUpgrade(usuarioId, tenantId, planId, email) {
 
 /**
  * Activa una suscripción cuando MP confirma el pago (webhook authorized).
- * Cancela la suscripción gratuita/anterior.
+ * C6: Usa FOR UPDATE para evitar race condition.
+ * Verifica el estado real en MP ANTES de abrir transacción.
  */
 export async function activateSubscription(mpPreapprovalId) {
-  // Verificar estado real en MP
+  // Verificar estado real en MP ANTES de transacción
   const preapproval = await getPreapproval(mpPreapprovalId);
   if (preapproval.status !== 'authorized') {
     throw new Error(`Pago no autorizado. Estado MP: ${preapproval.status}`);
   }
 
-  // Buscar la suscripción pendiente
-  const [rows] = await pool.query(
-    "SELECT * FROM suscripciones WHERE mp_preapproval_id = ? AND estado = 'pendiente' LIMIT 1",
-    [mpPreapprovalId]
-  );
-  if (!rows.length) throw new Error('Suscripción pendiente no encontrada');
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
 
-  const sub = rows[0];
+    // FOR UPDATE bloquea la fila — llamadas concurrentes esperan
+    const [rows] = await conn.query(
+      "SELECT * FROM suscripciones WHERE mp_preapproval_id = ? AND estado = 'pendiente' LIMIT 1 FOR UPDATE",
+      [mpPreapprovalId]
+    );
+    if (!rows.length) {
+      await conn.rollback();
+      throw new Error('Suscripción pendiente no encontrada o ya fue procesada');
+    }
 
-  // Cancelar suscripciones activas anteriores del mismo usuario/tenant
-  await pool.query(
-    `UPDATE suscripciones
-     SET estado = 'cancelado', updated_at = NOW()
-     WHERE usuario_id = ? AND tenant_id = ? AND estado = 'activo'`,
-    [sub.usuario_id, sub.tenant_id]
-  );
+    const sub = rows[0];
 
-  // Activar la nueva
-  const fechaFin = new Date();
-  fechaFin.setMonth(fechaFin.getMonth() + 1);
-  await pool.query(
-    `UPDATE suscripciones
-     SET estado = 'activo',
-         fecha_inicio = CURDATE(),
-         fecha_fin = ?,
-         fecha_renovacion_proximo = ?,
-         updated_at = NOW()
-     WHERE id = ?`,
-    [fechaFin.toISOString().split('T')[0], fechaFin.toISOString().split('T')[0], sub.id]
-  );
+    // Cancelar suscripciones activas anteriores del mismo usuario/tenant
+    await conn.query(
+      `UPDATE suscripciones
+       SET estado = 'cancelado', updated_at = NOW()
+       WHERE usuario_id = ? AND tenant_id = ? AND estado = 'activo'`,
+      [sub.usuario_id, sub.tenant_id]
+    );
 
-  return sub;
+    // Activar la nueva
+    const fechaFin = new Date();
+    fechaFin.setMonth(fechaFin.getMonth() + 1);
+    await conn.query(
+      `UPDATE suscripciones
+       SET estado = 'activo',
+           fecha_inicio = CURDATE(),
+           fecha_fin = ?,
+           fecha_renovacion_proximo = ?,
+           updated_at = NOW()
+       WHERE id = ?`,
+      [fechaFin.toISOString().split('T')[0], fechaFin.toISOString().split('T')[0], sub.id]
+    );
+
+    await conn.commit();
+    return sub;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 }
 
 /**

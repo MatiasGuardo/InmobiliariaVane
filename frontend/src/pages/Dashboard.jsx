@@ -41,11 +41,7 @@ function StatCard({ icon: Icon, label, value, color = "blue", trend, onClick }) 
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
-// Componente principal del dashboard que recibe datos de propiedades, contratos, inquilinos, propietarios y alertas activas. 
-// Muestra estadísticas clave, una barra de ocupación, alertas de vencimiento y contratos recientes, utilizando el componente StatCard para las estadísticas 
-// y aplicando estilos y lógica de formato para presentar la información de manera clara y visualmente atractiva.
-//setActive es una función que se pasa como prop para actualizar el estado de la página activa en el componente padre, permitiendo la navegación a diferentes secciones del dashboard al hacer clic en los elementos correspondientes.
-//activeAlerts es un array de alertas que se utilizan para determinar cuáles contratos tienen alertas activas de vencimiento y si han sido descartadas o no, lo que afecta su visualización en el dashboard.
+// Componente principal que muestra estadísticas, ocupación y alertas de contratos.
 
 export function Dashboard({ properties, leases, tenants, setActive, activeAlerts, owners }) {
   return (

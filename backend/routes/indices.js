@@ -314,50 +314,7 @@ router.post("/", async (req, res) => {
   }
 });
 
-// ─── DEBUG ROUTES (MUST BE BEFORE /:tipo) ─────────────────────
-router.get("/debug/status", async (req, res) => {
-  try {
-    const [rows] = await pool.query(
-      `SELECT tipo, COUNT(*) as total, MAX(periodo) as ultimo, MIN(periodo) as primero
-       FROM indices_historicos WHERE tenant_id = ? GROUP BY tipo`,
-      [req.user.tenantId]
-    );
-    res.json(rows.map((r) => ({ ...r, ultimo: fmtPeriodo(r.ultimo), primero: fmtPeriodo(r.primero) })));
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.get("/debug/test-bcra", async (req, res) => {
-  try {
-    const tipo = req.query.tipo ?? "IPC";
-    const rows = await fetchBCRA(tipo);
-    res.json({ ok: true, tipo, registros: rows.length, muestra: rows.slice(0, 3) });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.get("/debug/test-argentina-datos", async (req, res) => {
-  try {
-    const tipo = req.query.tipo ?? "IPC";
-    const rows = await fetchArgentinaDatos(tipo);
-    res.json({ ok: true, tipo, registros: rows.length, muestra: rows.slice(0, 3) });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.get("/debug/test-gob-ar", async (req, res) => {
-  try {
-    const rows = await fetchDatosGobAr("IPC");
-    res.json({ ok: true, tipo: "IPC", registros: rows.length, muestra: rows.slice(0, 3) });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ─── GET /api/indices/:tipo (GENERIC ROUTE - MUST BE LAST) ────
+// ─── GET /api/indices/:tipo (GENERIC ROUTE) ──────────────────
 router.get("/:tipo", async (req, res) => {
   const tipo = req.params.tipo.toUpperCase();
   if (!["ICL", "IPC"].includes(tipo))

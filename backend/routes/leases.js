@@ -3,6 +3,7 @@ import { pool, columnExists }    from "../db.js";
 import { mapLease } from "../mappers.js";
 import { authMiddleware } from "../middleware/auth.js";
 import { subscriptionMiddleware, checkLimits } from "../middleware/subscription.js";
+import { calcularProximaActualizacion } from "../services/rentCalc.js";
 
 const router = Router();
 
@@ -27,13 +28,6 @@ async function getIndiceBase(conn, tipo, fecha) {
     [tipo, primerDia]
   );
   return rows.length ? parseFloat(rows[0].valor) : null;
-}
-
-function calcProximaActualizacion(fechaInicio, periodo) {
-  const months = { trimestral: 3, cuatrimestral: 4, semestral: 6, anual: 12 }[periodo] ?? 12;
-  const d = new Date(fechaInicio);
-  d.setMonth(d.getMonth() + months);
-  return d.toISOString().split("T")[0];
 }
 
 // ─── GET /api/leases ──────────────────────────────────────────
@@ -96,7 +90,7 @@ router.post("/", checkLimits('contratos'), async (req, res) => {
       indiceBaseFecha = startDate.slice(0, 7) + "-01";
     }
 
-    const proximaActualizacion = calcProximaActualizacion(startDate, period);
+    const proximaActualizacion = calcularProximaActualizacion(startDate, period);
     const indiceAjuste = tipoAjuste === "FIJO"
       ? buildIndiceAjuste(increase, period)
       : null;
@@ -216,7 +210,7 @@ router.put("/:id", async (req, res) => {
       indiceBaseFecha = startDate.slice(0, 7) + "-01";
     }
 
-    const proximaActualizacion = calcProximaActualizacion(startDate, period);
+    const proximaActualizacion = calcularProximaActualizacion(startDate, period);
     const indiceAjuste = tipoAjuste === "FIJO" ? buildIndiceAjuste(increase, period) : null;
 
     const hasNewCols = await columnExists("contratos", "tipo_ajuste");

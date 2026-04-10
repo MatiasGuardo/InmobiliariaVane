@@ -134,9 +134,9 @@ export default function Login({ auth }) {
             dark ? 'bg-gray-700/50 text-gray-300' : 'bg-gray-50'
           }`}>
             <p><strong>Admin:</strong> admin@localhost / admin123</p>
-            <p><strong>Starter:</strong> starter@localhost / admin123</p>
-            <p><strong>Pro:</strong> pro@localhost / admin123</p>
-            <p><strong>Viewer:</strong> viewer@localhost / admin123</p>
+            <p><strong>Starter:</strong> starter@localhost / starter123</p>
+            <p><strong>Pro:</strong> pro@localhost / pro123</p>
+            <p><strong>Viewer:</strong> viewer@localhost / viewer123</p>
           </div>
         </div>
       </div>
