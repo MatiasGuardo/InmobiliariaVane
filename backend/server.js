@@ -28,6 +28,7 @@ import documentsRouter  from "./routes/documents.js";
 import indicesRouter    from "./routes/indices.js";
 import authRouter       from "./routes/auth.js";
 import subscriptionsRouter from "./routes/subscriptions.js";
+import { authMiddleware } from "./middleware/auth.js";
 
 import "./db.js";
 import "./cron.js";
@@ -57,7 +58,7 @@ app.use("/api/indices",    indicesRouter);
 app.use("/api/auth",       authRouter);
 app.use("/api/subscriptions", subscriptionsRouter);
 
-app.get("/api/alertas", async (_req, res) => {
+app.get("/api/alertas", authMiddleware, async (req, res) => {
   try {
     const { pool } = await import("./db.js");
     const [rows] = await pool.query(
@@ -71,8 +72,10 @@ app.get("/api/alertas", async (_req, res) => {
        JOIN personas  pi   ON pi.id = c.inquilino_id
        JOIN personas  pp   ON pp.id = c.propietario_id
        JOIN propiedades pr  ON pr.id = c.propiedad_id
+       WHERE c.tenant_id = ?
        ORDER BY a.enviada_at DESC
-       LIMIT 50`
+       LIMIT 50`,
+      [req.user.tenantId]
     );
     res.json(rows);
   } catch (err) {
@@ -81,7 +84,8 @@ app.get("/api/alertas", async (_req, res) => {
   }
 });
 
-app.post("/api/admin/run-cron", async (_req, res) => {
+app.post("/api/admin/run-cron", authMiddleware, async (req, res) => {
+  if (req.user.rol !== 'admin') return res.status(403).json({ error: 'Solo admins' });
   try {
     const { default: runCron } = await import("./cron.js");
     await runCron();

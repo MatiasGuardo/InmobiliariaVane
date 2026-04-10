@@ -1,5 +1,6 @@
 // backend/middleware/auth.js
 import jwt from 'jsonwebtoken';
+import { pool } from '../db.js';
 
 // Función helper para obtener JWT_SECRET en runtime
 function getJWTSecret() {
@@ -22,7 +23,16 @@ export async function authMiddleware(req, res, next) {
 
     const token = authHeader.slice(7);
     const decoded = jwt.verify(token, getJWTSecret());
-    
+
+    // Verificar que el token no esté en la blacklist (logout)
+    if (decoded.jti) {
+      const [[blacklisted]] = await pool.query(
+        'SELECT id FROM token_blacklist WHERE jti = ? AND expires_at > NOW() LIMIT 1',
+        [decoded.jti]
+      );
+      if (blacklisted) return res.status(401).json({ error: 'Token revocado' });
+    }
+
     // Adjuntar datos del usuario al request
     req.user = {
       id: decoded.id,
@@ -30,6 +40,7 @@ export async function authMiddleware(req, res, next) {
       email: decoded.email,
       nombre: decoded.nombre,
       rol: decoded.rol,
+      jti: decoded.jti,
     };
 
     next();

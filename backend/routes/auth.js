@@ -113,4 +113,27 @@ router.get('/me', authMiddleware, (req, res) => {
   res.json({ usuario: req.user });
 });
 
+// ── POST /api/auth/logout ─────────────────────────────────────────────────────
+router.post('/logout', authMiddleware, async (req, res) => {
+  try {
+    const { jti } = req.user;
+    if (jti) {
+      // Calcular cuándo expira el token para limpiar la blacklist después
+      // exp viene del token; lo leemos directamente del header
+      const authHeader = req.headers.authorization;
+      const token = authHeader.slice(7);
+      const { exp } = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+      const expiresAt = new Date(exp * 1000).toISOString().slice(0, 19).replace('T', ' ');
+
+      await pool.query(
+        'INSERT INTO token_blacklist (jti, usuario_id, expires_at) VALUES (?, ?, ?)',
+        [jti, req.user.id, expiresAt]
+      );
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al cerrar sesión' });
+  }
+});
+
 export default router;

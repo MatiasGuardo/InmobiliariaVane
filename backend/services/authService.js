@@ -67,8 +67,9 @@ export async function verifyPassword(password, hash) {
 // ─── Token ────────────────────────────────────────────────────────────────────
 
 export function generateToken(usuario) {
+  const jti = crypto.randomBytes(32).toString('hex');
   return jwt.sign(
-    { id: usuario.id, tenantId: usuario.tenant_id, email: usuario.email, nombre: usuario.nombre, rol: usuario.rol },
+    { id: usuario.id, tenantId: usuario.tenant_id, email: usuario.email, nombre: usuario.nombre, rol: usuario.rol, jti },
     getJWTSecret(),
     { expiresIn: JWT_EXPIRY }
   );
