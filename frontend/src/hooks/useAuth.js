@@ -88,7 +88,18 @@ export function useAuth() {
     }
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    const storedToken = localStorage.getItem('authToken');
+    if (storedToken) {
+      try {
+        await fetch(`${API_BASE_URL}/auth/logout`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${storedToken}` },
+        });
+      } catch {
+        // Si falla el request igual limpiamos localmente
+      }
+    }
     setUser(null);
     setTenant(null);
     setToken(null);

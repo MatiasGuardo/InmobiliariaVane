@@ -16,12 +16,6 @@ if (envResult.error) {
   console.log('✅ .env cargado exitosamente');
 }
 
-console.log('JWT_SECRET definido:', !!process.env.JWT_SECRET);
-if (process.env.JWT_SECRET) {
-  console.log('JWT_SECRET (primeros 30 caracteres):', process.env.JWT_SECRET.substring(0, 30) + '...');
-} else {
-  console.error('❌ JWT_SECRET NO está definido en .env');
-}
 
 import express from "express";
 import cors    from "cors";
@@ -34,6 +28,7 @@ import documentsRouter  from "./routes/documents.js";
 import indicesRouter    from "./routes/indices.js";
 import authRouter       from "./routes/auth.js";
 import subscriptionsRouter from "./routes/subscriptions.js";
+import { authMiddleware } from "./middleware/auth.js";
 
 import "./db.js";
 import "./cron.js";
@@ -41,56 +36,202 @@ import "./cron.js";
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors({
-  origin: [
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "http://localhost:4173",
-    "http://127.0.0.1:5173",
-    process.env.FRONTEND_URL,
-  ].filter(Boolean),
-  credentials: true,
-}));
+app.use(cors({ origin: process.env.FRONTEND_URL || "http://localhost:5173" }));
+app.use(express.json());
 
-app.use(express.json({ limit: "20mb" }));
+// ─── POOL DE CONEXIONES ─────────────────────────────────────
 
-app.use("/api/properties", propertiesRouter);
-app.use("/api/owners",     ownersRouter);
-app.use("/api/tenants",    tenantsRouter);
-app.use("/api/leases",     leasesRouter);
-app.use("/api/documents",  documentsRouter);
-app.use("/api/indices",    indicesRouter);
-app.use("/api/auth",       authRouter);
-app.use("/api/subscriptions", subscriptionsRouter);
+const pool = mysql.createPool({
+  host:     process.env.DB_HOST     || "127.0.0.1",
+  port:     Number(process.env.DB_PORT) || 3306,
+  user:     process.env.DB_USER     || "root",
+  password: process.env.DB_PASSWORD || "",
+  database: process.env.DB_NAME     || "inmobiliaria",
+  waitForConnections: true,
+  connectionLimit:    10,
+  timezone: "Z",
+});
 
-app.get("/api/alertas", async (_req, res) => {
+// Verifica conexión al arrancar
+pool.getConnection()
+  .then(conn => { console.log("✅  Conectado a MySQL"); conn.release(); })
+  .catch(err  => { console.error("❌  Error de conexión MySQL:", err.message); process.exit(1); });
+
+// ─── HELPER ─────────────────────────────────────────────────
+
+// Mapea una fila de `personas` + `propiedades` al shape que espera el frontend
+function mapOwner(row) {
+  return {
+    id:    String(row.id),
+    name:  `${row.nombre} ${row.apellido}`,
+    email: row.email,
+    phone: row.telefono || "",
+    // Las propiedades asociadas se calculan aparte (ver GET /api/owners)
+    properties: row.properties ? row.properties.split(",").map(String) : [],
+  };
+}
+
+function mapTenant(row) {
+  return {
+    id:      String(row.id),
+    name:    `${row.nombre} ${row.apellido}`,
+    email:   row.email,
+    phone:   row.telefono || "",
+    leaseId: row.leaseId ? String(row.leaseId) : null,
+  };
+}
+
+function mapProperty(row) {
+  return {
+    id:      String(row.id),
+    address: `${row.direccion}${row.numero ? ", " + row.numero : ""}`,
+    type:    mapTipo(row.tipo),
+    price:   Number(row.precio_lista),
+    status:  row.estado === "alquilada" ? "ocupado" : "vacante",
+    ownerId: String(row.id_propietario),
+    leaseId: row.leaseId ? String(row.leaseId) : null,
+  };
+}
+
+function mapLease(row) {
+  return {
+    id:         String(row.id),
+    propertyId: String(row.propiedad_id),
+    tenantId:   String(row.inquilino_id),
+    startDate:  row.fecha_inicio instanceof Date
+                  ? row.fecha_inicio.toISOString().split("T")[0]
+                  : String(row.fecha_inicio),
+    endDate:    row.fecha_fin instanceof Date
+                  ? row.fecha_fin.toISOString().split("T")[0]
+                  : String(row.fecha_fin),
+    rent:       Number(row.monto_renta),
+    increase:   6,   // el frontend usa un % fijo; en BD se guarda en indice_ajuste
+    status:     row.estado_contrato === "activo" ? "activo" : row.estado_contrato,
+  };
+}
+
+// Traduce el tipo de propiedad del frontend al ENUM de la BD
+function mapTipoToDB(tipo) {
+  const m = {
+    "Departamento":     "departamento",
+    "Local Comercial":  "local_comercial",
+    "Casa":             "casa",
+    "Oficina":          "oficina",
+    "Galpón":           "galpon",
+    "Terreno":          "terreno",
+  };
+  return m[tipo] || "otro";
+}
+
+function mapTipo(tipo) {
+  const m = {
+    departamento:    "Departamento",
+    local_comercial: "Local Comercial",
+    casa:            "Casa",
+    oficina:         "Oficina",
+    galpon:          "Galpón",
+    terreno:         "Terreno",
+    otro:            "Otro",
+  };
+  return m[tipo] || tipo;
+}
+
+// ─── PROPIEDADES ─────────────────────────────────────────────
+
+// GET /api/properties
+app.get("/api/properties", async (_req, res) => {
   try {
-    const { pool } = await import("./db.js");
-    const [rows] = await pool.query(
-      `SELECT a.*,
-         DATE_FORMAT(a.fecha_alerta, '%Y-%m-%d') AS fecha_alerta,
-         pi.nombre AS inq_nombre, pi.apellido AS inq_apellido,
-         pp.nombre AS prop_nombre, pp.apellido AS prop_apellido,
-         pr.direccion AS propiedad_dir
-       FROM alertas_actualizacion a
-       JOIN contratos c    ON c.id  = a.contrato_id
-       JOIN personas  pi   ON pi.id = c.inquilino_id
-       JOIN personas  pp   ON pp.id = c.propietario_id
-       JOIN propiedades pr  ON pr.id = c.propiedad_id
-       ORDER BY a.enviada_at DESC
-       LIMIT 50`
+    const [rows] = await pool.query(`
+      SELECT
+        p.*,
+        (
+          SELECT c.id
+          FROM contratos c
+          WHERE c.propiedad_id = p.id
+            AND c.estado_contrato = 'activo'
+          LIMIT 1
+        ) AS leaseId
+      FROM propiedades p
+      WHERE p.activo = 1
+      ORDER BY p.id DESC
+    `);
+    res.json(rows.map(mapProperty));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al obtener propiedades" });
+  }
+});
+
+// POST /api/properties
+app.post("/api/properties", async (req, res) => {
+  const { address, type, price, status, ownerId } = req.body;
+
+  if (!address || !price || !ownerId) {
+    return res.status(400).json({ error: "Faltan campos obligatorios: address, price, ownerId" });
+  }
+
+  // Separar dirección y número (ej. "Av. Santa Fe 2450, Piso 3B")
+  const parts   = address.split(",");
+  const dir     = parts[0]?.trim() || address;
+  const numero  = parts.slice(1).join(",").trim() || null;
+  const estado  = status === "ocupado" ? "alquilada" : "disponible";
+
+  try {
+    const [result] = await pool.query(
+      `INSERT INTO propiedades
+         (id_propietario, direccion, numero, ciudad, codigo_postal, tipo, estado, precio_lista, moneda, activo)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ARS', 1)`,
+      [ownerId, dir, numero, "Buenos Aires", "1000", mapTipoToDB(type), estado, price]
     );
-    res.json(rows);
+
+    const [[row]] = await pool.query(
+      `SELECT p.*, NULL AS leaseId FROM propiedades p WHERE p.id = ?`,
+      [result.insertId]
+    );
+
+    res.status(201).json(mapProperty(row));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post("/api/admin/run-cron", async (_req, res) => {
+// PUT /api/properties/:id
+app.put("/api/properties/:id", async (req, res) => {
+  const { id }                          = req.params;
+  const { address, type, price, status, ownerId } = req.body;
+
+  const parts  = (address || "").split(",");
+  const dir    = parts[0]?.trim() || address;
+  const numero = parts.slice(1).join(",").trim() || null;
+  const estado = status === "ocupado" ? "alquilada" : "disponible";
+
   try {
-    const { default: runCron } = await import("./cron.js");
-    await runCron();
+    await pool.query(
+      `UPDATE propiedades
+         SET direccion = ?, numero = ?, tipo = ?, estado = ?, precio_lista = ?, id_propietario = ?
+       WHERE id = ?`,
+      [dir, numero, mapTipoToDB(type), estado, price, ownerId, id]
+    );
+
+    const [[row]] = await pool.query(
+      `SELECT p.*,
+         (SELECT c.id FROM contratos c WHERE c.propiedad_id = p.id AND c.estado_contrato = 'activo' LIMIT 1) AS leaseId
+       FROM propiedades p WHERE p.id = ?`,
+      [id]
+    );
+
+    res.json(mapProperty(row));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al actualizar propiedad" });
+  }
+});
+
+// DELETE /api/properties/:id  (baja lógica)
+app.delete("/api/properties/:id", async (req, res) => {
+  try {
+    await pool.query("UPDATE propiedades SET activo = 0 WHERE id = ?", [req.params.id]);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -99,15 +240,7 @@ app.post("/api/admin/run-cron", async (_req, res) => {
 
 app.get("/api/health", (_req, res) => res.json({ status: "ok", ts: new Date() }));
 
-// DEBUG: Verifica que JWT_SECRET está cargado
-app.get("/api/debug/jwt-secret", (_req, res) => {
-  const secret = process.env.JWT_SECRET;
-  res.json({ 
-    hasSecret: !!secret, 
-    secretLength: secret ? secret.length : 0,
-    secretFirst20: secret ? secret.substring(0, 20) + '...' : 'NO DEFINIDO'
-  });
-});
+// ─── START ───────────────────────────────────────────────────
 
 app.listen(PORT, () => {
   console.log(`🚀  PropManager API corriendo en http://localhost:${PORT}`);
