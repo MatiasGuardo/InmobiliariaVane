@@ -7,8 +7,8 @@ import { pool } from '../db.js';
 const JWT_EXPIRY = '7d';
 
 function getJWTSecret() {
-  const secret = process.env.JWT_SECRET || 'dev-secret-change-in-production';
-  if (!process.env.JWT_SECRET) console.warn('⚠️  JWT_SECRET no definido');
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new Error('JWT_SECRET no definido. Configuralo en .env antes de iniciar.');
   return secret;
 }
 

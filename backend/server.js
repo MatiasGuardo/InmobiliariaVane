@@ -16,12 +16,6 @@ if (envResult.error) {
   console.log('✅ .env cargado exitosamente');
 }
 
-console.log('JWT_SECRET definido:', !!process.env.JWT_SECRET);
-if (process.env.JWT_SECRET) {
-  console.log('JWT_SECRET (primeros 30 caracteres):', process.env.JWT_SECRET.substring(0, 30) + '...');
-} else {
-  console.error('❌ JWT_SECRET NO está definido en .env');
-}
 
 import express from "express";
 import cors    from "cors";
@@ -99,15 +93,6 @@ app.post("/api/admin/run-cron", async (_req, res) => {
 
 app.get("/api/health", (_req, res) => res.json({ status: "ok", ts: new Date() }));
 
-// DEBUG: Verifica que JWT_SECRET está cargado
-app.get("/api/debug/jwt-secret", (_req, res) => {
-  const secret = process.env.JWT_SECRET;
-  res.json({ 
-    hasSecret: !!secret, 
-    secretLength: secret ? secret.length : 0,
-    secretFirst20: secret ? secret.substring(0, 20) + '...' : 'NO DEFINIDO'
-  });
-});
 
 app.listen(PORT, () => {
   console.log(`🚀  PropManager API corriendo en http://localhost:${PORT}`);

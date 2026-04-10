@@ -3,10 +3,8 @@ import jwt from 'jsonwebtoken';
 
 // Función helper para obtener JWT_SECRET en runtime
 function getJWTSecret() {
-  const secret = process.env.JWT_SECRET || 'dev-secret-change-in-production';
-  if (!process.env.JWT_SECRET) {
-    console.warn('⚠️  JWT_SECRET no está definido, usando fallback inseguro');
-  }
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new Error('JWT_SECRET no definido. Configuralo en .env antes de iniciar.');
   return secret;
 }
 
