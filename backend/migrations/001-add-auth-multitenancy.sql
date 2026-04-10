@@ -90,7 +90,7 @@ ADD FOREIGN KEY fk_indices_tenant (tenant_id) REFERENCES tenants(id) ON DELETE C
 -- Si es la primera vez, esto crea el tenant "default" con ID=1
 -- Todos los datos existentes quedan asignados a este tenant
 INSERT IGNORE INTO tenants (id, nombre, email, plan, activo) 
-VALUES (1, 'PropManager', 'default@localhost', 'basic', TRUE);
+VALUES (1, 'OnKey', 'default@localhost', 'basic', TRUE);
 
 -- Crear usuario admin por defecto (contraseña: cambiar después!)
 -- Hash de "admin123" con bcrypt

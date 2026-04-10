@@ -54,7 +54,7 @@ export default function Login({ auth }) {
       }`}>
         <div className="text-center mb-8">
           <h1 className={`text-3xl font-bold mb-2 ${dark ? 'text-white' : 'text-gray-800'}`}>
-            PropManager
+            OnKey
           </h1>
           <p className={dark ? 'text-gray-400' : 'text-gray-600'}>Gestión Inmobiliaria</p>
         </div>

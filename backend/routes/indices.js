@@ -59,7 +59,7 @@ async function fetchBCRA(tipo) {
 
   try {
     const res = await fetch(url, {
-      headers: { Accept: "application/json", "User-Agent": "PropManager/1.0" },
+      headers: { Accept: "application/json", "User-Agent": "OnKey/1.0" },
       signal: controller.signal,
     });
     clearTimeout(timeout);
@@ -108,7 +108,7 @@ async function fetchArgentinaDatos(tipo) {
       const timeout = setTimeout(() => controller.abort(), 7000);
 
       const res = await fetch(url, {
-        headers: { Accept: "application/json", "User-Agent": "PropManager/1.0" },
+        headers: { Accept: "application/json", "User-Agent": "OnKey/1.0" },
         signal: controller.signal,
       });
       clearTimeout(timeout);

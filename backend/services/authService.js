@@ -32,13 +32,13 @@ export async function sendVerificationEmail(email, nombre, token) {
 
   const transporter = getMailTransporter();
   await transporter.sendMail({
-    from: `"PropManager" <${process.env.SMTP_USER}>`,
+    from: `"OnKey" <${process.env.SMTP_USER}>`,
     to: email,
-    subject: 'Verificá tu cuenta en PropManager',
+    subject: 'Verificá tu cuenta en OnKey',
     html: `
       <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;">
         <h2 style="color:#1d4ed8;">¡Hola, ${nombre}!</h2>
-        <p>Gracias por registrarte en <strong>PropManager</strong>.</p>
+        <p>Gracias por registrarte en <strong>OnKey</strong>.</p>
         <p>Hacé clic en el botón para verificar tu cuenta:</p>
         <a href="${link}" 
            style="display:inline-block;background:#1d4ed8;color:#fff;padding:12px 24px;

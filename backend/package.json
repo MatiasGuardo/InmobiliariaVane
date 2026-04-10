@@ -1,7 +1,7 @@
 {
-  "name": "propmanager-api",
+  "name": "onkey-api",
   "version": "1.0.0",
-  "description": "Backend API para PropManager - Gestión Inmobiliaria",
+  "description": "Backend API para OnKey - Gestión Inmobiliaria",
   "type": "module",
   "main": "server.js",
   "scripts": {

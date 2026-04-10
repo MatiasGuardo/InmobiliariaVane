@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { diffDays, getAlertLevel } from "../utils/helpers";
 
-const STORAGE_KEY = "propmanager_dismissed_alerts";
+const STORAGE_KEY = "onkey_dismissed_alerts";
 
 function readDismissed() {
   try {

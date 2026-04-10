@@ -60,7 +60,7 @@ export default function Register({ onGoToLogin }) {
           <h2 className="text-2xl font-bold text-gray-800 mb-2">¡Revisá tu correo!</h2>
           <p className="text-gray-500 text-sm mb-6">
             Te enviamos un link de verificación a <strong>{form.email}</strong>.
-            Hacé clic en el link para activar tu cuenta y empezar a usar PropManager.
+            Hacé clic en el link para activar tu cuenta y empezar a usar OnKey.
           </p>
           <p className="text-xs text-gray-400 mb-6">
             ¿No llegó? Revisá la carpeta de spam o esperá unos minutos.
